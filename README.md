@@ -27,7 +27,20 @@ Projenin ilk hedefi, dogrudan koddan once saglam bir karar ve otomasyon mimarisi
 - [Sprint 1 Uygulama Checklist](docs/10-sprint-1-implementation-checklist.md)
 - [Teknik Stack ve Komutlar](docs/11-tech-stack-and-commands.md)
 - [Selector Sozlesmesi](docs/12-selector-contract.md)
+- [Scraper Probe Output Contract](docs/13-scraper-probe-output-contract.md)
 
 ## Mevcut Durum
 
 Bu repo henuz planlama ve tasarim asamasindadir. Ilk uygulama hedefi, Incehesap konfigurator sayfasinda kategori akisini okuyabilen ve secim zincirini dogrulayabilen kucuk bir teknik prototiptir.
+
+## Ilk Scraper Prototipi
+
+Sprint 1 scraper prototipi su komutlarla calistirilir:
+
+```powershell
+pnpm install
+pnpm scraper:install
+pnpm scraper:run
+```
+
+Kosu sonunda CLI kisa bir ozet basar. Ayrintili `report.json` ve screenshot dosyalari `runs/local/` altinda olusur.

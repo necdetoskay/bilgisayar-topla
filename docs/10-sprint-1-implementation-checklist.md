@@ -105,6 +105,8 @@ Basarili kosu raporu su bilgileri icermelidir:
 - toplam kosu suresi
 - screenshot dosya yolu
 
+Rapor formati ayrica `docs/13-scraper-probe-output-contract.md` dosyasinda sabitlenmistir.
+
 ## Sprint Sonu Karari
 
 Sprint 1 sonunda iki karar verilecektir:

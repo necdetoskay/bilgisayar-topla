@@ -1,31 +1,14 @@
 import { chromium, Locator, Page } from "playwright";
 import { loadConfig } from "./config.js";
+import { findFirstPrice, parseTurkishPrice, PRICE_PATTERN } from "./price.js";
+import { summarizeReport } from "./report.js";
 import { createRunContext, writeReport } from "./snapshot.js";
 import { selectorGroups } from "./selectors.js";
-import { ProductOption, ScraperReport, ScraperStep } from "./types.js";
+import { compactText, normalizeText } from "./text.js";
+import { ProductOption, ScraperDiagnostic, ScraperReport, ScraperStep } from "./types.js";
 
 const CPU_KEYWORDS = ["cpu", "islemci", "processor"];
 const MOTHERBOARD_KEYWORDS = ["anakart", "motherboard", "mainboard"];
-const PRICE_PATTERN = /(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d{2})?\s*(?:tl|try|₺)/i;
-
-function normalizeText(value: string): string {
-  return value
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/ş/g, "s")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function findFirstPrice(text: string): string | undefined {
-  return text.match(PRICE_PATTERN)?.[0];
-}
 
 async function collectVisibleTexts(page: Page, limit = 80): Promise<string[]> {
   return page.locator("h1,h2,h3,h4,h5,button,[role=button],label,summary").evaluateAll(
@@ -64,7 +47,7 @@ async function extractProductOptions(block: Locator, limit = 10): Promise<Produc
 
     for (let index = 0; index < count; index += 1) {
       const card = cards.nth(index);
-      const rawText = (await card.textContent({ timeout: 500 }).catch(() => ""))?.replace(/\s+/g, " ").trim();
+      const rawText = compactText((await card.textContent({ timeout: 500 }).catch(() => "")) ?? "");
 
       if (!rawText || !PRICE_PATTERN.test(rawText)) {
         continue;
@@ -74,6 +57,7 @@ async function extractProductOptions(block: Locator, limit = 10): Promise<Produc
         category: "cpu",
         name: rawText.slice(0, 180),
         priceText: findFirstPrice(rawText),
+        priceValue: parseTurkishPrice(rawText),
         isAvailable: !normalizeText(rawText).includes("stokta yok"),
         rawText
       });
@@ -109,6 +93,7 @@ async function runProbe(): Promise<ScraperReport> {
   const startedAt = new Date();
   const runContext = await createRunContext(config.runsDir, startedAt);
   const steps: ScraperStep[] = [];
+  const diagnostics: ScraperDiagnostic[] = [];
 
   const browser = await chromium.launch({ headless: config.headless });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
@@ -131,6 +116,13 @@ async function runProbe(): Promise<ScraperReport> {
         startedAt: startedAt.toISOString(),
         finishedAt: new Date().toISOString(),
         steps: [...steps, { name: "find_cpu_block", status: "failed", note: "CPU block was not found." }],
+        diagnostics: [
+          {
+            code: "CPU_BLOCK_NOT_FOUND",
+            message: "CPU block was not found by keyword and price signals.",
+            details: { visibleTextCount: categoryTexts.length }
+          }
+        ],
         categoryTexts,
         cpuOptions: [],
         screenshotPath
@@ -160,10 +152,27 @@ async function runProbe(): Promise<ScraperReport> {
         status: selectedBy ? "ok" : "failed",
         note: selectedBy ? `Clicked by selector candidate: ${selectedBy}` : "No select button candidate worked."
       });
+
+      if (!selectedBy) {
+        diagnostics.push({
+          code: "CPU_SELECT_BUTTON_NOT_FOUND",
+          message: "CPU options were extracted, but no selectable button candidate worked.",
+          details: { cpuOptionCount: cpuOptions.length }
+        });
+      }
+
       steps.push({
         name: "detect_motherboard_after_cpu",
         status: motherboardDetected ? "ok" : "failed"
       });
+
+      if (!motherboardDetected) {
+        diagnostics.push({
+          code: "MOTHERBOARD_NOT_DETECTED_AFTER_CPU",
+          message: "A CPU selection was attempted, but motherboard options were not detected.",
+          details: { selectedBy: selectedBy ?? null }
+        });
+      }
     }
 
     const screenshotPath = await runContext.screenshot(page, "probe-result");
@@ -173,6 +182,7 @@ async function runProbe(): Promise<ScraperReport> {
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       steps,
+      diagnostics,
       categoryTexts,
       cpuOptions,
       selectedBy,
@@ -194,7 +204,7 @@ export async function runScraperProbe(): Promise<ScraperReport> {
 if (import.meta.url === `file://${process.argv[1]}`) {
   runProbe()
     .then((report) => {
-      console.log(JSON.stringify(report, null, 2));
+      console.log(summarizeReport(report));
       process.exit(report.ok ? 0 : 1);
     })
     .catch((error: unknown) => {

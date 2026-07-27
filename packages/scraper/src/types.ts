@@ -36,12 +36,19 @@ export interface ScraperStep {
   note?: string;
 }
 
+export interface ScraperDiagnostic {
+  code: string;
+  message: string;
+  details?: Record<string, string | number | boolean | null>;
+}
+
 export interface ScraperReport {
   ok: boolean;
   targetUrl: string;
   startedAt: string;
   finishedAt: string;
   steps: ScraperStep[];
+  diagnostics: ScraperDiagnostic[];
   categoryTexts: string[];
   cpuOptions: ProductOption[];
   selectedBy?: string;
