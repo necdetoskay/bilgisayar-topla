@@ -24,6 +24,9 @@ Projenin ilk hedefi, dogrudan koddan once saglam bir karar ve otomasyon mimarisi
 - [Sprint 1 Teknik Spec](docs/07-sprint-1-playwright-prototype-spec.md)
 - [Repo ve Uygulama Iskeleti](docs/08-repo-and-application-skeleton.md)
 - [Test ve Kabul Stratejisi](docs/09-test-and-acceptance-strategy.md)
+- [Sprint 1 Uygulama Checklist](docs/10-sprint-1-implementation-checklist.md)
+- [Teknik Stack ve Komutlar](docs/11-tech-stack-and-commands.md)
+- [Selector Sozlesmesi](docs/12-selector-contract.md)
 
 ## Mevcut Durum
 
