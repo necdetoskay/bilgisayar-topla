@@ -72,3 +72,14 @@ Kod yazmaya baslamadan once su dokumanlar netlesmelidir:
 - Skor motoru ilk kurallari
 - MVP kabul kriterleri
 - Risk ve hata raporlama kurallari
+
+## Sprint 1 Cikis Kriteri
+
+Sprint 1 sonunda uygulama henuz sistem onerisi uretmek zorunda degildir. Basarili kabul icin su kanitlar yeterlidir:
+
+- Incehesap toplama sayfasi Playwright ile acilir.
+- CPU kategori alani guvenilir sekilde bulunur.
+- CPU secenekleri ad, fiyat ve secilebilirlik bilgisiyle okunur.
+- En az bir CPU secimi yapilir.
+- Secimden sonra anakart alaninin aktiflestigi dogrulanir.
+- Kosu sonunda JSON snapshot, ekran goruntusu ve run log uretilir.

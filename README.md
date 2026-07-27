@@ -21,6 +21,9 @@ Projenin ilk hedefi, dogrudan koddan once saglam bir karar ve otomasyon mimarisi
 - [AI Agent Tasarimi](docs/04-ai-agent-design.md)
 - [MVP ve Sprint Yol Haritasi](docs/05-mvp-roadmap.md)
 - [Riskler ve Guvenli Calisma Kurallari](docs/06-risk-register.md)
+- [Sprint 1 Teknik Spec](docs/07-sprint-1-playwright-prototype-spec.md)
+- [Repo ve Uygulama Iskeleti](docs/08-repo-and-application-skeleton.md)
+- [Test ve Kabul Stratejisi](docs/09-test-and-acceptance-strategy.md)
 
 ## Mevcut Durum
 
