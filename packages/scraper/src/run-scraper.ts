@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium, Locator, Page } from "playwright";
 import { loadConfig } from "./config.js";
 import { findFirstPrice, parseTurkishPrice, PRICE_PATTERN } from "./price.js";
@@ -250,7 +252,17 @@ export async function runScraperProbe(): Promise<ScraperReport> {
   return runProbe();
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isDirectRun(): boolean {
+  const entryPath = process.argv[1];
+
+  if (!entryPath) {
+    return false;
+  }
+
+  return resolve(fileURLToPath(import.meta.url)) === resolve(entryPath);
+}
+
+if (isDirectRun()) {
   runProbe()
     .then((report) => {
       console.log(summarizeReport(report));
