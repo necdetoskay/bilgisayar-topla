@@ -28,6 +28,7 @@ Projenin ilk hedefi, dogrudan koddan once saglam bir karar ve otomasyon mimarisi
 - [Teknik Stack ve Komutlar](docs/11-tech-stack-and-commands.md)
 - [Selector Sozlesmesi](docs/12-selector-contract.md)
 - [Scraper Probe Output Contract](docs/13-scraper-probe-output-contract.md)
+- [Selection Chain Probe](docs/14-selection-chain-probe.md)
 
 ## Mevcut Durum
 

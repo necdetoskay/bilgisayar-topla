@@ -7,6 +7,8 @@ export function summarizeReport(report: ScraperReport): string {
     `cpuOptions=${report.cpuOptions.length}`,
     `selectedBy=${report.selectedBy ?? "none"}`,
     `motherboardDetected=${report.motherboardDetected ?? false}`,
+    `motherboardOptions=${report.motherboardOptions.length}`,
+    `totalPrice=${report.totalPriceText ?? "none"}`,
     `screenshot=${report.screenshotPath ?? "none"}`
   ];
 

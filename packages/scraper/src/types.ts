@@ -51,6 +51,9 @@ export interface ScraperReport {
   diagnostics: ScraperDiagnostic[];
   categoryTexts: string[];
   cpuOptions: ProductOption[];
+  motherboardOptions: ProductOption[];
+  totalPriceText?: string;
+  totalPriceValue?: number;
   selectedBy?: string;
   motherboardDetected?: boolean;
   screenshotPath?: string;

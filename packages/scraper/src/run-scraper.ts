@@ -37,7 +37,11 @@ async function findBlockByKeywords(page: Page, keywords: string[]): Promise<Loca
   return undefined;
 }
 
-async function extractProductOptions(block: Locator, limit = 10): Promise<ProductOption[]> {
+async function extractProductOptions(
+  block: Locator,
+  category: ProductOption["category"],
+  limit = 10
+): Promise<ProductOption[]> {
   const cardSelectors = selectorGroups.productCards.candidates.map((candidate) => candidate.selector);
   const options: ProductOption[] = [];
 
@@ -54,7 +58,7 @@ async function extractProductOptions(block: Locator, limit = 10): Promise<Produc
       }
 
       options.push({
-        category: "cpu",
+        category,
         name: rawText.slice(0, 180),
         priceText: findFirstPrice(rawText),
         priceValue: parseTurkishPrice(rawText),
@@ -69,6 +73,33 @@ async function extractProductOptions(block: Locator, limit = 10): Promise<Produc
   }
 
   return options;
+}
+
+async function extractPageTotalPrice(page: Page): Promise<{ text?: string; value?: number }> {
+  for (const candidate of selectorGroups.totalPrice.candidates) {
+    const blocks = page.locator(candidate.selector);
+    const count = Math.min(await blocks.count().catch(() => 0), 100);
+
+    for (let index = 0; index < count; index += 1) {
+      const rawText = compactText((await blocks.nth(index).textContent({ timeout: 500 }).catch(() => "")) ?? "");
+      const normalized = normalizeText(rawText);
+
+      if (!normalized.includes("toplam") && !normalized.includes("total")) {
+        continue;
+      }
+
+      const priceText = findFirstPrice(rawText);
+
+      if (priceText) {
+        return {
+          text: priceText,
+          value: parseTurkishPrice(priceText)
+        };
+      }
+    }
+  }
+
+  return {};
 }
 
 async function trySelectFirstOption(cpuBlock: Locator): Promise<string | undefined> {
@@ -125,6 +156,7 @@ async function runProbe(): Promise<ScraperReport> {
         ],
         categoryTexts,
         cpuOptions: [],
+        motherboardOptions: [],
         screenshotPath
       };
       await writeReport(runContext, report);
@@ -132,7 +164,7 @@ async function runProbe(): Promise<ScraperReport> {
     }
 
     steps.push({ name: "find_cpu_block", status: "ok" });
-    const cpuOptions = await extractProductOptions(cpuBlock);
+    const cpuOptions = await extractProductOptions(cpuBlock, "cpu");
     steps.push({
       name: "extract_cpu_options",
       status: cpuOptions.length > 0 ? "ok" : "failed",
@@ -141,12 +173,19 @@ async function runProbe(): Promise<ScraperReport> {
 
     let selectedBy: string | undefined;
     let motherboardDetected = false;
+    let motherboardOptions: ProductOption[] = [];
+    let totalPriceText: string | undefined;
+    let totalPriceValue: number | undefined;
 
     if (cpuOptions.length > 0) {
       selectedBy = await trySelectFirstOption(cpuBlock);
       await page.waitForTimeout(2_000);
       const motherboardBlock = await findBlockByKeywords(page, MOTHERBOARD_KEYWORDS);
       motherboardDetected = Boolean(motherboardBlock);
+      motherboardOptions = motherboardBlock ? await extractProductOptions(motherboardBlock, "motherboard") : [];
+      const totalPrice = await extractPageTotalPrice(page);
+      totalPriceText = totalPrice.text;
+      totalPriceValue = totalPrice.value;
       steps.push({
         name: "select_first_cpu",
         status: selectedBy ? "ok" : "failed",
@@ -163,7 +202,8 @@ async function runProbe(): Promise<ScraperReport> {
 
       steps.push({
         name: "detect_motherboard_after_cpu",
-        status: motherboardDetected ? "ok" : "failed"
+        status: motherboardDetected ? "ok" : "failed",
+        note: `${motherboardOptions.length} motherboard candidates found.`
       });
 
       if (!motherboardDetected) {
@@ -173,6 +213,12 @@ async function runProbe(): Promise<ScraperReport> {
           details: { selectedBy: selectedBy ?? null }
         });
       }
+
+      steps.push({
+        name: "extract_total_price_after_cpu",
+        status: totalPriceText ? "ok" : "skipped",
+        note: totalPriceText ? `Detected total price: ${totalPriceText}` : "Total price was not detected after CPU selection."
+      });
     }
 
     const screenshotPath = await runContext.screenshot(page, "probe-result");
@@ -185,6 +231,9 @@ async function runProbe(): Promise<ScraperReport> {
       diagnostics,
       categoryTexts,
       cpuOptions,
+      motherboardOptions,
+      totalPriceText,
+      totalPriceValue,
       selectedBy,
       motherboardDetected,
       screenshotPath
