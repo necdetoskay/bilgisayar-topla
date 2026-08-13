@@ -80,6 +80,8 @@ type HepsiburadaProductState = {
   variants?: unknown;
 };
 
+const MAX_AI_PAGE_TEXT_CHARS = 60_000;
+
 export async function extractProductFeatureProfile(
   input: ProductExtractionInput,
 ): Promise<ProductExtractionResult> {
@@ -95,7 +97,7 @@ export async function extractProductFeatureProfile(
   const aiOutput = input.aiExtractor
     ? await input.aiExtractor({
         url: input.url,
-        htmlText: normalizeText(html),
+        htmlText: prepareAiPageText(normalizeText(html)),
         fetchedAt: checkedAt,
         locale: input.locale ?? "tr-TR",
         intendedUseSummary: input.intendedUseSummary,
@@ -586,6 +588,39 @@ function normalizeText(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function prepareAiPageText(text: string): string {
+  if (text.length <= MAX_AI_PAGE_TEXT_CHARS) {
+    return text;
+  }
+
+  const productInfoIndex = findFirstIndex(text, [
+    "Ürün Bilgileri",
+    "Urun Bilgileri",
+    "Ürün özellikleri",
+    "Urun ozellikleri",
+    "Teknik Özellikler",
+    "Teknik Ozellikler",
+  ]);
+
+  if (productInfoIndex >= 0) {
+    const prefix = text.slice(0, 8_000);
+    const featureWindow = text.slice(
+      Math.max(0, productInfoIndex - 2_000),
+      productInfoIndex + MAX_AI_PAGE_TEXT_CHARS - prefix.length,
+    );
+    return `${prefix}\n\n${featureWindow}`.slice(0, MAX_AI_PAGE_TEXT_CHARS);
+  }
+
+  return text.slice(0, MAX_AI_PAGE_TEXT_CHARS);
+}
+
+function findFirstIndex(text: string, needles: string[]): number {
+  const indexes = needles
+    .map((needle) => text.indexOf(needle))
+    .filter((index) => index >= 0);
+  return indexes.length ? Math.min(...indexes) : -1;
 }
 
 function slug(value: string): string {
