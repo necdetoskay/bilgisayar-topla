@@ -9,7 +9,19 @@ The specification module is a generic public-procurement technical specification
 
 It MUST NOT be tightly coupled to PC builds. A completed PC build is only one possible input. The same module should later support products such as printers, monitors, scanners, network devices, UPS units or other office/IT equipment.
 
+The module may also accept a product page URL, extract the product's published properties, convert them into a product-neutral feature profile, and generate a procurement-safe draft specification.
+
 The module generates a draft technical specification and compliance report. It does not create a final legally authoritative document. Final review and approval remain with the institution/idare.
+
+## Input Modes
+
+The module should support three input modes:
+
+1. `productNeed`: the user describes what they want to buy.
+2. `completedBuildTarget`: the PC builder or another upstream tool sends a completed target/product profile.
+3. `productPageUrl`: the user provides a product page link from a marketplace or vendor site.
+
+The output contract should stay the same: a product-neutral feature profile, draft specification, compliance report and evidence/proof chain.
 
 ## Canonical Product Specification Flow
 
@@ -24,6 +36,46 @@ The generic flow is:
 7. The system generates product-neutral technical specification clauses.
 8. The system runs compliance checks.
 9. The system outputs a draft specification, evidence report and review-required items.
+
+## Product Page URL Flow
+
+When the user provides a product page URL, the system should run this flow:
+
+1. Fetch/open the product page.
+2. Extract visible product title, category, feature table, description and technical properties.
+3. Preserve source provenance: URL, checkedAt, page title, seller/site identity, extraction method and snapshot/checksum where feasible.
+4. Classify the product category.
+5. Normalize extracted properties into a `ProductFeatureProfile`.
+6. Separate product identity fields from reusable technical capability fields.
+7. Remove or quarantine brand/model/vendor identifiers.
+8. Ask missing usage/scope questions if the page does not explain the procurement need.
+9. Generate product-neutral clauses from the normalized capability profile.
+10. Run compliance gates and output draft/report.
+
+A product page is useful evidence for what a product can do, but it is not safe wording for a public procurement specification.
+
+## Product Page Evidence Boundary
+
+Marketplace and seller pages are treated as untrusted acquired source content.
+
+The system MUST NOT blindly trust or copy product-page text into the specification. It must extract, normalize and validate.
+
+The product page may provide:
+
+- candidate product category
+- feature values
+- capability examples
+- available standards/certifications shown on the page
+- product feasibility evidence
+
+The product page MUST NOT become:
+
+- authoritative legal source
+- final clause wording source
+- justification for brand/model lock-in
+- sole evidence for a restrictive technical criterion
+
+If the requirement depends on official manufacturer data or public procurement rules, the system should seek official/manufacturer/legal sources or mark the clause `reviewRequired`.
 
 ## PC Build Integration Flow
 
@@ -48,6 +100,7 @@ The specification module should later handle requests like:
 - `Muhasebe birimi icin monitor alimi sartnamesi lazim.`
 - `Tarayici almak istiyorum, kamu alimi sartname taslagi cikar.`
 - `Kesintilere karsi UPS alimi icin teknik sartname hazirla.`
+- `Bu Hepsiburada urun linkinden teknik sartname taslagi cikar.`
 
 For each product category, the module should first ask usage and scope questions, then derive neutral criteria.
 
@@ -147,6 +200,7 @@ Each specification run SHOULD produce:
 
 - product need summary
 - product feature profile
+- product page extraction report when URL input is used
 - draft specification Markdown
 - compliance report JSON
 - evidence/proof chain JSON
@@ -176,3 +230,5 @@ Minimum tests:
 - AI output cannot self-approve final specification
 - standalone product request can create a feature profile without PC build input
 - product category risky terms are detected
+- product page URL extraction preserves source provenance
+- product page identity fields are not copied into final clauses
