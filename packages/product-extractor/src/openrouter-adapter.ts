@@ -3,6 +3,11 @@ import type {
   AiProductFeatureExtractionOutput,
   AiProductFeatureExtractor,
 } from "./index.js";
+import {
+  createProductExtractionCostRecord,
+  pricingForProductExtractorModel,
+  type ProductExtractionCostLedger,
+} from "./cost-ledger.js";
 import { productExtractorModelFromEnv } from "./model-policy.js";
 
 export type OpenRouterUsage = {
@@ -16,6 +21,7 @@ export type OpenRouterExtractorAdapterOptions = {
   model?: string;
   fetchImpl?: typeof fetch;
   usageSink?: (usage: OpenRouterUsage) => void;
+  costLedger?: ProductExtractionCostLedger;
 };
 
 type OpenRouterChatResponse = {
@@ -74,11 +80,20 @@ export function createOpenRouterProductFeatureExtractor(
     }
 
     const payload = (await response.json()) as OpenRouterChatResponse;
-    options.usageSink?.({
+    const usage: OpenRouterUsage = {
       promptTokens: payload.usage?.prompt_tokens,
       completionTokens: payload.usage?.completion_tokens,
       totalTokens: payload.usage?.total_tokens,
-    });
+    };
+    options.usageSink?.(usage);
+    await options.costLedger?.record(
+      createProductExtractionCostRecord({
+        model,
+        sourceUrl: input.url,
+        usage,
+        pricing: pricingForProductExtractorModel(model),
+      }),
+    );
 
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {

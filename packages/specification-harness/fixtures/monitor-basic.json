@@ -1,0 +1,59 @@
+{
+  "profileId": "profile-monitor-basic",
+  "schemaVersion": "1.0.0",
+  "productCategory": "monitor",
+  "sourceMode": "manualEntry",
+  "createdAt": "2026-08-13T00:00:00.000Z",
+  "locale": "tr-TR",
+  "intendedUse": {
+    "summary": "Ofis kullanimi icin harici monitor"
+  },
+  "identity": {
+    "title": "Example Display 24 Office Monitor",
+    "brand": "Example Display",
+    "model": "24"
+  },
+  "features": [
+    {
+      "key": "monitor.size",
+      "label": "Ekran boyutu",
+      "value": 24,
+      "unit": "inc",
+      "group": "display",
+      "requirementLevel": "required",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "medium",
+      "clauseEligible": true
+    },
+    {
+      "key": "monitor.resolution",
+      "label": "Ekran cozunurlugu",
+      "value": "1920x1080",
+      "group": "display",
+      "requirementLevel": "required",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "none",
+      "clauseEligible": true
+    },
+    {
+      "key": "identity.brand",
+      "label": "Marka",
+      "value": "Example Display",
+      "group": "identity",
+      "requirementLevel": "informational",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "high",
+      "clauseEligible": false
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "manual-001",
+      "sourceType": "manualEntry",
+      "sourceLabel": "Fixture data",
+      "qualityState": "ready"
+    }
+  ],
+  "gaps": [],
+  "readiness": "readyForSpecification"
+}
