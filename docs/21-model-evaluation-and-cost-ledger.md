@@ -7,15 +7,17 @@ Global standard references:
 
 - `necdetoskay/engineering-standards/standards/ai/AI_RUNTIME_ROUTING_STANDARD_v1.md`
 - `necdetoskay/engineering-standards/standards/ai/AI_AUTHORING_GROUNDING_STANDARD_v1.md`
+- `necdetoskay/engineering-standards/standards/ai/GOLDEN_DATASET_BASELINE_v1.md`
 
 ## Purpose
 
 The project should continuously understand which AI models are used, how much they cost, and whether newer/cheaper qualified alternatives can perform the same capability.
 
-This profile adds two responsibilities:
+This profile adds three responsibilities:
 
 1. Model evaluation and alternative discovery.
 2. Per-run/per-specification token and cost accounting.
+3. Golden dataset based model quality measurement.
 
 ## Core Principle
 
@@ -49,6 +51,74 @@ A candidate model can be considered only if it has:
 - qualification status
 - benchmark/evaluation result
 - fallback eligibility
+
+## Golden Dataset Evaluation
+
+The project should maintain a project-specific golden dataset for model comparison.
+
+A golden case should contain:
+
+- stable case id
+- dataset version
+- capability under test
+- product category
+- input `ProductFeatureProfile` or extractor fixture
+- expected structured output when deterministic
+- approved reference output or rubric when natural language varies
+- forbidden output expectations
+- evidence references
+- compliance gate expectations
+- language
+- difficulty tags
+- reviewer/approval metadata
+
+Example case classes:
+
+- normal product profiles
+- edge cases
+- ambiguous products
+- sparse product data
+- brand/model leakage traps
+- clock-speed leakage traps
+- network device throughput wording cases
+- printer/monitor/scanner/UPS category cases
+- public procurement wording risk cases
+- regression cases from real failures
+
+## Candidate vs Reference Comparison
+
+New model candidates should be tested against the golden dataset.
+
+Suggested comparison flow:
+
+1. Run candidate model on the same input fixtures.
+2. Validate structured output schema.
+3. Run deterministic compliance gates.
+4. Compare candidate output to approved reference output/rubric.
+5. Optionally use a stronger baseline/judge model for qualitative review.
+6. Record score, cost, latency and failure reasons.
+7. Decide candidate status: `candidate`, `qualified`, `rejected`, `deprecated`.
+
+The reference output should come from deterministic/domain truth, approved canonical material, or human-reviewed expected output. A model-generated output alone is not ground truth.
+
+## Scoring Dimensions
+
+Capability-specific scoring should include:
+
+- schema validity
+- task correctness
+- technical terminology correctness
+- evidence preservation
+- product-neutral wording
+- brand/model/vendor leakage avoidance
+- measurable clause quality
+- legal/procurement risk detection
+- correct abstention/reviewRequired behavior
+- Turkish language quality
+- latency
+- estimated/actual cost
+
+Hard-gate failures cannot be averaged away by a high language-quality score.
 
 ## Scheduled Alternative Discovery
 
@@ -136,6 +206,24 @@ export type SpecificationCostSummary = {
 };
 ```
 
+## Evaluation Report
+
+A model evaluation report should show:
+
+- dataset version
+- capability
+- candidate provider/model
+- reference/baseline provider/model when used
+- prompt version
+- schema version
+- case count
+- pass/fail by hard gate
+- aggregate score
+- cost per case
+- latency per case
+- failure examples
+- qualification decision
+
 ## Reports
 
 The final run report should show:
@@ -156,6 +244,8 @@ The final run report should show:
 - Cost optimization cannot bypass evidence, privacy, source or compliance gates.
 - Candidate discovery cannot auto-promote models.
 - Evaluation output must be traceable to dataset, prompt version, schema version and evaluator.
+- Golden dataset cases must be versioned.
+- Model-generated answer alone is not ground truth.
 - Specification generation must record cost summary.
 
 ## Tests
@@ -168,3 +258,5 @@ Minimum tests:
 - candidate model cannot become production-qualified without evaluation status
 - fallback cost is recorded separately
 - cheaper model output cannot bypass compliance gates
+- golden dataset case can compare candidate output with expected output/rubric
+- hard-gate failure blocks qualification even if aggregate score is high
