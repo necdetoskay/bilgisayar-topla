@@ -1,0 +1,32 @@
+{
+  "profileId": "profile-desktop-ghz-risk",
+  "schemaVersion": "1.0.0",
+  "productCategory": "desktopComputer",
+  "sourceMode": "manualEntry",
+  "createdAt": "2026-08-13T00:00:00.000Z",
+  "locale": "tr-TR",
+  "identity": {},
+  "features": [
+    {
+      "key": "cpu.clockSpeed",
+      "label": "Islemci temel hizi",
+      "value": 3.5,
+      "unit": "GHz",
+      "group": "processor",
+      "requirementLevel": "required",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "medium",
+      "clauseEligible": true
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "manual-001",
+      "sourceType": "manualEntry",
+      "sourceLabel": "Risk fixture",
+      "qualityState": "ready"
+    }
+  ],
+  "gaps": [],
+  "readiness": "readyForSpecification"
+}
