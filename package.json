@@ -6,6 +6,7 @@
   "scripts": {
     "scraper:install": "pnpm --filter @bilgisayar-topla/scraper exec playwright install chromium",
     "scraper:run": "pnpm --filter @bilgisayar-topla/scraper run start",
+    "test": "pnpm -r run test",
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {
