@@ -1,0 +1,58 @@
+{
+  "profileId": "profile-printer-basic",
+  "schemaVersion": "1.0.0",
+  "productCategory": "printer",
+  "sourceMode": "manualEntry",
+  "createdAt": "2026-08-13T00:00:00.000Z",
+  "locale": "tr-TR",
+  "intendedUse": {
+    "summary": "Muhasebe birimi icin ofis yazicisi"
+  },
+  "identity": {
+    "title": "Example Brand X123 Mono Laser Printer",
+    "brand": "Example Brand",
+    "model": "X123"
+  },
+  "features": [
+    {
+      "key": "printer.duplex",
+      "label": "Otomatik cift tarafli baski ozelligi",
+      "value": true,
+      "group": "printing",
+      "requirementLevel": "required",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "none",
+      "clauseEligible": true
+    },
+    {
+      "key": "printer.paperSize",
+      "label": "A4 kagit boyutu destegi",
+      "value": true,
+      "group": "paper",
+      "requirementLevel": "required",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "none",
+      "clauseEligible": true
+    },
+    {
+      "key": "identity.brand",
+      "label": "Marka",
+      "value": "Example Brand",
+      "group": "identity",
+      "requirementLevel": "informational",
+      "sourceRefIds": ["manual-001"],
+      "lockInRisk": "high",
+      "clauseEligible": false
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "manual-001",
+      "sourceType": "manualEntry",
+      "sourceLabel": "Fixture data",
+      "qualityState": "ready"
+    }
+  ],
+  "gaps": [],
+  "readiness": "readyForSpecification"
+}
