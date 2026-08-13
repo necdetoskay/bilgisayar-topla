@@ -59,6 +59,15 @@ export type ExtractedSpec = {
   unit?: string;
 };
 
+type HepsiburadaProductState = {
+  brand?: unknown;
+  sku?: unknown;
+  barcode?: unknown;
+  name?: unknown;
+  categories?: unknown;
+  variants?: unknown;
+};
+
 export async function extractProductFeatureProfile(
   input: ProductExtractionInput,
 ): Promise<ProductExtractionResult> {
@@ -66,7 +75,11 @@ export async function extractProductFeatureProfile(
   const evidenceId = "product-page-001";
   const url = parseUrl(input.url);
   const html = input.html ?? "";
-  const structuredSpecs = extractTableSpecs(html);
+  const hepsiburadaProduct = extractHepsiburadaProductState(html);
+  const structuredSpecs = dedupeSpecs([
+    ...extractHepsiburadaSpecs(hepsiburadaProduct),
+    ...extractTableSpecs(html),
+  ]);
   const aiOutput = input.aiExtractor
     ? await input.aiExtractor({
         url: input.url,
@@ -76,7 +89,9 @@ export async function extractProductFeatureProfile(
         intendedUseSummary: input.intendedUseSummary,
       })
     : undefined;
-  const productCategory = aiOutput?.productCategory ?? inferCategory(html);
+  const productCategory =
+    aiOutput?.productCategory ??
+    inferCategory(hepsiburadaCategoryText(hepsiburadaProduct) || html);
   const specs = dedupeSpecs(
     aiOutput?.features?.length ? aiOutput.features : structuredSpecs,
   );
@@ -93,9 +108,16 @@ export async function extractProductFeatureProfile(
       ? { summary: input.intendedUseSummary }
       : undefined,
     identity: {
-      title: aiOutput?.identity?.title ?? extractTitle(html),
-      brand: aiOutput?.identity?.brand,
-      model: aiOutput?.identity?.model,
+      title:
+        aiOutput?.identity?.title ??
+        stringValue(hepsiburadaProduct?.name) ??
+        extractTitle(html),
+      brand:
+        aiOutput?.identity?.brand ?? stringValue(hepsiburadaProduct?.brand),
+      model:
+        aiOutput?.identity?.model ??
+        stringValue(hepsiburadaProduct?.sku) ??
+        stringValue(hepsiburadaProduct?.barcode),
       manufacturer: aiOutput?.identity?.manufacturer,
       sourceUrl: url?.href,
     },
@@ -151,6 +173,97 @@ function parseUrl(rawUrl: string): URL | undefined {
   } catch {
     return undefined;
   }
+}
+
+function extractHepsiburadaProductState(
+  html: string,
+): HepsiburadaProductState | undefined {
+  const stateJson = html.match(
+    /<script[^>]+id=["']reduxStore["'][^>]*>\s*([\s\S]*?)\s*<\/script>/i,
+  )?.[1];
+  if (!stateJson) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(stateJson) as unknown;
+    if (!isRecord(parsed)) {
+      return undefined;
+    }
+    const productState = parsed.productState;
+    if (!isRecord(productState) || !isRecord(productState.product)) {
+      return undefined;
+    }
+    return productState.product as HepsiburadaProductState;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractHepsiburadaSpecs(
+  product: HepsiburadaProductState | undefined,
+): ExtractedSpec[] {
+  if (!product || !Array.isArray(product.variants)) {
+    return [];
+  }
+
+  return product.variants.flatMap((variant) => {
+    if (!isRecord(variant)) {
+      return [];
+    }
+    if (Array.isArray(variant.properties)) {
+      return variant.properties.flatMap(extractHepsiburadaVariantProperty);
+    }
+
+    return extractHepsiburadaVariantProperty(variant);
+  });
+}
+
+function extractHepsiburadaVariantProperty(variant: unknown): ExtractedSpec[] {
+  if (!isRecord(variant)) {
+    return [];
+  }
+
+    const label = stringValue(variant.displayName) ?? stringValue(variant.name);
+    const valueObject = variant.valueObject;
+    const rawValue = isRecord(valueObject)
+      ? stringValue(valueObject.actualValue)
+      : stringValue(variant.value);
+    const normalized = normalizeValue(rawValue);
+    if (!label || !normalized) {
+      return [];
+    }
+
+  return [
+    {
+      label,
+      value: normalized.value,
+      unit: normalized.unit,
+    },
+  ];
+}
+
+function hepsiburadaCategoryText(
+  product: HepsiburadaProductState | undefined,
+): string {
+  if (!product) {
+    return "";
+  }
+
+  const categoryNames = Array.isArray(product.categories)
+    ? product.categories.flatMap((category) => {
+        if (!isRecord(category)) {
+          return [];
+        }
+        return [
+          stringValue(category.categoryName),
+          stringValue(category.breadcrumbTitle),
+          stringValue(category.urlKeyword),
+        ].filter(Boolean);
+      })
+    : [];
+
+  return [stringValue(product.name), ...categoryNames].filter(Boolean).join(" ");
 }
 
 function extractTableSpecs(html: string): ExtractedSpec[] {
@@ -213,9 +326,6 @@ function lockInRisk(spec: ExtractedSpec): LockInRisk {
 function inferCategory(text: string): ProductCategory {
   const normalized = text.toLocaleLowerCase("tr-TR");
 
-  if (/(monitor|ekran)/i.test(normalized)) {
-    return "monitor";
-  }
   if (/(printer|yazici|yazıcı)/i.test(normalized)) {
     return "printer";
   }
@@ -224,6 +334,9 @@ function inferCategory(text: string): ProductCategory {
   }
   if (/(notebook|laptop|dizustu|dizüstü)/i.test(normalized)) {
     return "notebookComputer";
+  }
+  if (/(monitor|ekran)/i.test(normalized)) {
+    return "monitor";
   }
   if (/(switch|router|modem|access point|network|ag cihazi|ağ cihazı)/i.test(normalized)) {
     return "networkDevice";
@@ -298,6 +411,14 @@ function dedupeSpecs(specs: ExtractedSpec[]): ExtractedSpec[] {
 function extractTitle(html: string): string | undefined {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
   return title ? normalizeText(title) : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizeText(html: string): string {

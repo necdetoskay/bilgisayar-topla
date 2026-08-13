@@ -126,3 +126,79 @@ test("ULTEF: extractor falls back to structured page data without AI", async () 
     true,
   );
 });
+
+test("ULTEF: Hepsiburada redux product state extracts real product variants", async () => {
+  const html = `
+    <html>
+      <head><title>Apple MacBook Neo A18 Pro 8GB 256GB SSD macOS 13 Fiyatı</title></head>
+      <body>
+        <script type="mime/invalid" id="reduxStore">
+          {
+            "productState": {
+              "product": {
+                "brand": "Apple",
+                "sku": "HBCV0000D6UMYG",
+                "barcode": "0195950851014",
+                "name": "MacBook Neo A18 Pro 8GB 256GB SSD macOS 13\\" Taşınabilir Bilgisayar Gümüş MHFA4TU/A",
+                "categories": [
+                  {
+                    "categoryName": "Bilgisayar Sistemleri ve Ekipmanları",
+                    "breadcrumbTitle": "Bilgisayar Sistemleri ve Ekipmanları",
+                    "urlKeyword": "bilgisayar-sistemleri-ve-ekipmanlari"
+                  },
+                  {
+                    "categoryName": "Dizüstü Bilgisayar Laptop",
+                    "breadcrumbTitle": "Laptop",
+                    "urlKeyword": "laptop-notebook-dizustu-bilgisayarlar"
+                  }
+                ],
+                "variants": [
+                  {
+                    "sku": "HBCV0000D6UMYG",
+                    "properties": [
+                      {
+                        "name": "SSD Kapasitesi",
+                        "displayName": "SSD Kapasitesi",
+                        "valueObject": { "actualValue": "256 GB" }
+                      },
+                      {
+                        "name": "Ram (Sistem Belleği)",
+                        "displayName": "Ram (Sistem Belleği)",
+                        "valueObject": { "actualValue": "8 GB" }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        </script>
+        <footer>Monitör Ekran Kartı Mouse</footer>
+      </body>
+    </html>
+  `;
+
+  const result = await extractProductFeatureProfile({
+    url: "https://www.hepsiburada.com/example-p-HBCV0000D6UMYG",
+    html,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+  });
+
+  assert.equal(result.extractionMode, "structuredFallback");
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.profile.productCategory, "notebookComputer");
+  assert.equal(result.profile.identity.brand, "Apple");
+  assert.equal(result.profile.identity.model, "HBCV0000D6UMYG");
+  assert.equal(result.profile.features.length, 2);
+  assert.deepEqual(
+    result.profile.features.map((feature) => ({
+      label: feature.label,
+      value: feature.value,
+      unit: feature.unit,
+    })),
+    [
+      { label: "SSD Kapasitesi", value: 256, unit: "gb" },
+      { label: "Ram (Sistem Belleği)", value: 8, unit: "gb" },
+    ],
+  );
+});
