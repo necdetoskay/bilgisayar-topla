@@ -9,12 +9,13 @@
     "specification-harness": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @bilgisayar-topla/product-extractor run build && tsc -p tsconfig.json",
     "run": "pnpm run build && node dist/cli.js",
     "test": "pnpm run build && node --test dist/**/*.test.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm --filter @bilgisayar-topla/product-extractor run build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@bilgisayar-topla/product-extractor": "workspace:*",
     "@bilgisayar-topla/shared-contracts": "workspace:*",
     "@bilgisayar-topla/specification": "workspace:*"
   }
