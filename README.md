@@ -12,6 +12,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - Ortak veri sozlesmesi: Tum urun/cihaz ozellikleri `ProductFeatureProfile` yapisina normalize edilir.
 - Karar motoru: Kural tabanli uyumluluk, hedef profil ve skor motoru.
 - AI rolu: Capability bazli model yonlendirme ile ihtiyac ayrisma, teknik yorumlama, kaynak arastirma, sartname taslagi ve uygunluk destek islemleri yapar. AI kanitsiz kesin gereksinim veya sartname maddesi uretmez.
+- AI maliyet/kalite yonetimi: Kullanilan modeller, token miktarlari, tahmini/gercek maliyetler ve alternatif model degerlendirmeleri kayit altina alinir.
 - Sartname rolu: Sadece hazir `ProductFeatureProfile` girdisini kamu alimi diline cevirir; marka/model/vendor/hiz isaretleyen ifadeleri engeller veya review-required yapar.
 
 ## Dokumanlar
@@ -37,6 +38,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - [Implementation Work Packages](docs/18-implementation-work-packages.md)
 - [Product Feature Profile Contract](docs/19-product-feature-profile-contract.md)
 - [AI Capability Routing Profile](docs/20-ai-capability-routing.md)
+- [Model Evaluation and Cost Ledger Profile](docs/21-model-evaluation-and-cost-ledger.md)
 
 ## Takip Issue'lari
 
@@ -56,6 +58,7 @@ Yeni ana uygulama yonu:
 4. Incehesap uzerinden uyumlu sistemi topla.
 5. Cihaz/urun ozelliklerini `ProductFeatureProfile` yapisina cevir.
 6. Gerekiyorsa kamu alimi teknik sartname taslagina aktar.
+7. AI kullaniminda token, model ve maliyet kaydini raporla.
 
 ## Ilk Scraper Prototipi
 
