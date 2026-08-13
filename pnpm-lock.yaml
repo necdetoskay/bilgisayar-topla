@@ -39,6 +39,15 @@ importers:
         specifier: workspace:*
         version: link:../shared-contracts
 
+  packages/specification-harness:
+    dependencies:
+      '@bilgisayar-topla/shared-contracts':
+        specifier: workspace:*
+        version: link:../shared-contracts
+      '@bilgisayar-topla/specification':
+        specifier: workspace:*
+        version: link:../specification
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.1':
