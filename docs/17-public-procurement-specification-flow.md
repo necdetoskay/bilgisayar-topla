@@ -7,94 +7,83 @@ Related issue: https://github.com/necdetoskay/bilgisayar-topla/issues/2
 
 The specification module is a generic public-procurement technical specification engine.
 
-It MUST NOT be tightly coupled to PC builds. A completed PC build is only one possible input. The same module should later support products such as printers, monitors, scanners, network devices, UPS units or other office/IT equipment.
+It MUST NOT be tightly coupled to PC builds, product page scraping, marketplace links or any specific upstream data source.
 
-The module may also accept a product page URL, extract the product's published properties, convert them into a product-neutral feature profile, and generate a procurement-safe draft specification.
+The specification module's only responsibility is:
+
+`ProductFeatureProfile -> product-neutral technical specification draft -> compliance report`
 
 The module generates a draft technical specification and compliance report. It does not create a final legally authoritative document. Final review and approval remain with the institution/idare.
 
-## Input Modes
+## Architectural Boundary
 
-The module should support three input modes:
+The specification module MUST receive ready, normalized product/device features.
 
-1. `productNeed`: the user describes what they want to buy.
-2. `completedBuildTarget`: the PC builder or another upstream tool sends a completed target/product profile.
-3. `productPageUrl`: the user provides a product page link from a marketplace or vendor site.
+It MUST NOT:
 
-The output contract should stay the same: a product-neutral feature profile, draft specification, compliance report and evidence/proof chain.
+- open product links
+- scrape marketplace pages
+- extract raw product properties from HTML
+- run PC build selection
+- decide which product to buy
+- treat a selected product page as final wording source
 
-## Canonical Product Specification Flow
+Those jobs belong to upstream producer modules.
 
-The generic flow is:
+## Upstream Producers
 
-1. User states the product they want to buy.
-2. The system asks what the product will be used for.
-3. The system extracts required product capabilities.
-4. The system resolves official standards, legal/procurement rules and product-category references where applicable.
-5. The system derives a product-neutral technical feature profile.
-6. The system asks missing scope questions.
-7. The system generates product-neutral technical specification clauses.
-8. The system runs compliance checks.
-9. The system outputs a draft specification, evidence report and review-required items.
+The specification module may receive `ProductFeatureProfile` from different producers:
 
-## Product Page URL Flow
+1. `pc-builder`: builds a complete PC target and sends normalized hardware features.
+2. `product-extractor`: reads a product page URL and extracts/normalizes visible product properties.
+3. `manual-entry`: user or operator enters product/device properties directly.
+4. Future domain modules: printer planner, monitor planner, UPS planner, network device planner.
 
-When the user provides a product page URL, the system should run this flow:
+All producers must output the same kind of normalized feature profile before calling the specification module.
 
-1. Fetch/open the product page.
-2. Extract visible product title, category, feature table, description and technical properties.
-3. Preserve source provenance: URL, checkedAt, page title, seller/site identity, extraction method and snapshot/checksum where feasible.
-4. Classify the product category.
-5. Normalize extracted properties into a `ProductFeatureProfile`.
-6. Separate product identity fields from reusable technical capability fields.
-7. Remove or quarantine brand/model/vendor identifiers.
-8. Ask missing usage/scope questions if the page does not explain the procurement need.
-9. Generate product-neutral clauses from the normalized capability profile.
-10. Run compliance gates and output draft/report.
+## Canonical Specification Flow
 
-A product page is useful evidence for what a product can do, but it is not safe wording for a public procurement specification.
+The specification module flow is:
 
-## Product Page Evidence Boundary
+1. Receive `ProductFeatureProfile`.
+2. Validate feature completeness and evidence references.
+3. Load product category profile.
+4. Generate product-neutral technical specification clauses.
+5. Run brand/model/vendor/lock-in gates.
+6. Run measurability and inspection/acceptance checks.
+7. Run public procurement wording compliance checks.
+8. Output draft specification, compliance report and review-required items.
 
-Marketplace and seller pages are treated as untrusted acquired source content.
+## Product Page URL Flow Belongs Outside
 
-The system MUST NOT blindly trust or copy product-page text into the specification. It must extract, normalize and validate.
+When the user provides a marketplace/vendor product page URL, the system should route it to a separate extractor module:
 
-The product page may provide:
+`Product Page URL -> product-extractor -> ProductFeatureProfile -> specification module`
 
-- candidate product category
-- feature values
-- capability examples
-- available standards/certifications shown on the page
-- product feasibility evidence
+The extractor module is responsible for:
 
-The product page MUST NOT become:
+- fetching/opening the page
+- extracting visible product title/category/specification rows/description
+- preserving source provenance
+- separating identity fields from reusable technical capability fields
+- normalizing features into `ProductFeatureProfile`
+- quarantining brand/model/vendor identifiers
 
-- authoritative legal source
-- final clause wording source
-- justification for brand/model lock-in
-- sole evidence for a restrictive technical criterion
-
-If the requirement depends on official manufacturer data or public procurement rules, the system should seek official/manufacturer/legal sources or mark the clause `reviewRequired`.
+The specification module only sees the normalized profile and evidence references.
 
 ## PC Build Integration Flow
 
 The PC build application may route a completed build into the specification module:
 
-1. User need is collected.
-2. Official software requirements are resolved.
-3. Hardware target profile is derived.
-4. Incehesap-compatible PC build is assembled.
-5. All selected/required properties are known.
-6. The completed build target is handed to the generic specification module.
-7. The specification module rewrites the build into procurement-safe technical language.
-8. Compliance report flags risky clauses and missing evidence.
+`PC Build Target -> normalized ProductFeatureProfile -> specification module`
+
+The PC build module may know selected products, exact models and exact properties. The specification module MUST NOT copy selected products into final clause wording when this creates brand/model/vendor lock-in.
 
 This is an integration scenario, not the only way to use the specification module.
 
 ## Standalone Product Examples
 
-The specification module should later handle requests like:
+The full application may later handle requests like:
 
 - `Yazici icin teknik sartname hazirla.`
 - `Muhasebe birimi icin monitor alimi sartnamesi lazim.`
@@ -102,15 +91,7 @@ The specification module should later handle requests like:
 - `Kesintilere karsi UPS alimi icin teknik sartname hazirla.`
 - `Bu Hepsiburada urun linkinden teknik sartname taslagi cikar.`
 
-For each product category, the module should first ask usage and scope questions, then derive neutral criteria.
-
-## Boundary
-
-The upstream module may know selected products, exact models and exact properties.
-
-The specification module MUST NOT copy selected products into the final clause wording when this creates brand/model/vendor lock-in.
-
-Selected products are evidence that the target is realistic. They are not wording templates for the procurement specification.
+In each case, an upstream producer must first create `ProductFeatureProfile`. Then the specification module generates the draft.
 
 ## Procurement Language Principle
 
@@ -160,7 +141,7 @@ Even `or equivalent` is not a safe default when the clause first points to a bra
 
 ## Preferred Direction
 
-The generator SHOULD translate product need and selected/known capabilities into neutral criteria.
+The generator SHOULD translate product need and known capabilities into neutral criteria.
 
 Examples:
 
@@ -174,7 +155,7 @@ Examples:
 
 Each product category SHOULD have a profile defining:
 
-- required discovery questions
+- required feature fields
 - measurable feature vocabulary
 - risky lock-in words
 - acceptable standards/certifications
@@ -198,9 +179,7 @@ All source use must preserve provenance: URL, checkedAt, snapshot/checksum where
 
 Each specification run SHOULD produce:
 
-- product need summary
-- product feature profile
-- product page extraction report when URL input is used
+- product feature profile input reference
 - draft specification Markdown
 - compliance report JSON
 - evidence/proof chain JSON
@@ -214,7 +193,7 @@ Each specification run SHOULD produce:
 Suggested states:
 
 - `draftReady`: draft exists and no hard gate failed
-- `needsClarification`: missing usage/scope input prevents safe draft
+- `needsMoreFeatures`: feature profile is incomplete
 - `reviewRequired`: draft exists but legal/policy/human review is needed
 - `blocked`: hard gate failure prevents draft readiness
 
@@ -228,7 +207,5 @@ Minimum tests:
 - vague/unverifiable wording is flagged
 - legal source lineage survives draft generation
 - AI output cannot self-approve final specification
-- standalone product request can create a feature profile without PC build input
+- specification module can run from a fixture `ProductFeatureProfile` without PC build or URL access
 - product category risky terms are detected
-- product page URL extraction preserves source provenance
-- product page identity fields are not copied into final clauses
