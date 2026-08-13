@@ -7,7 +7,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "smoke:openrouter": "pnpm run build && node dist/openrouter-smoke.js",
+    "smoke:openrouter": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm run build && node dist/openrouter-smoke.js",
     "test": "pnpm run build && node --test dist/**/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
