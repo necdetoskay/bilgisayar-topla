@@ -1,0 +1,16 @@
+{
+  "name": "@bilgisayar-topla/specification",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "pnpm run build && node --test dist/**/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@bilgisayar-topla/shared-contracts": "workspace:*"
+  }
+}
