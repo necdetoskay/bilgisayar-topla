@@ -9,9 +9,10 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - Veri kaynagi: Incehesap bilgisayar toplama sayfasi.
 - Otomasyon: Playwright tabanli browser agent.
 - Gereksinim modeli: Resmi yazilim gereksinimleri ve kanit zinciri.
+- Ortak veri sozlesmesi: Tum urun/cihaz ozellikleri `ProductFeatureProfile` yapisina normalize edilir.
 - Karar motoru: Kural tabanli uyumluluk, hedef profil ve skor motoru.
 - AI rolu: Ihtiyac ayrisma, aciklama, alternatif yorumlama ve hata raporlama. AI kanitsiz kesin gereksinim veya sartname maddesi uretmez.
-- Sartname rolu: Tamamlanmis build hedefini kamu alimi diline cevirir; marka/model/vendor/hiz isaretleyen ifadeleri engeller veya review-required yapar.
+- Sartname rolu: Sadece hazir `ProductFeatureProfile` girdisini kamu alimi diline cevirir; marka/model/vendor/hiz isaretleyen ifadeleri engeller veya review-required yapar.
 
 ## Dokumanlar
 
@@ -34,11 +35,13 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - [Official Source Evidence Model](docs/16-official-source-evidence-model.md)
 - [Public Procurement Specification Flow](docs/17-public-procurement-specification-flow.md)
 - [Implementation Work Packages](docs/18-implementation-work-packages.md)
+- [Product Feature Profile Contract](docs/19-product-feature-profile-contract.md)
 
 ## Takip Issue'lari
 
 - [Requirement-first evidence-based PC build flow](https://github.com/necdetoskay/bilgisayar-topla/issues/1)
 - [Public procurement technical specification generator](https://github.com/necdetoskay/bilgisayar-topla/issues/2)
+- [Product extractor module for product page URL feature extraction](https://github.com/necdetoskay/bilgisayar-topla/issues/6)
 
 ## Mevcut Durum
 
@@ -50,7 +53,8 @@ Yeni ana uygulama yonu:
 2. Resmi kaynaklardan minimum ve onerilen gereksinimleri cikar.
 3. Kanitli donanim hedef profili olustur.
 4. Incehesap uzerinden uyumlu sistemi topla.
-5. Gerekiyorsa kamu alimi teknik sartname taslagina aktar.
+5. Cihaz/urun ozelliklerini `ProductFeatureProfile` yapisina cevir.
+6. Gerekiyorsa kamu alimi teknik sartname taslagina aktar.
 
 ## Ilk Scraper Prototipi
 
