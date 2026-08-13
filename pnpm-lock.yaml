@@ -33,6 +33,12 @@ importers:
 
   packages/shared-contracts: {}
 
+  packages/specification:
+    dependencies:
+      '@bilgisayar-topla/shared-contracts':
+        specifier: workspace:*
+        version: link:../shared-contracts
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.1':
