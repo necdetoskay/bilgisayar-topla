@@ -47,6 +47,9 @@ importers:
 
   packages/specification-harness:
     dependencies:
+      '@bilgisayar-topla/product-extractor':
+        specifier: workspace:*
+        version: link:../product-extractor
       '@bilgisayar-topla/shared-contracts':
         specifier: workspace:*
         version: link:../shared-contracts
