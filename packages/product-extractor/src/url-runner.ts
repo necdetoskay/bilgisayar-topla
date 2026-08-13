@@ -70,8 +70,17 @@ export async function runProductExtractionFromUrl(
   const costRecords: ProductExtractionCostRecord[] = [];
   const apiKey = env.OPENROUTER_API_KEY;
 
-  const pageResponse = await fetchImpl(options.url);
+  await mkdir(runDir, { recursive: true });
+
+  const pageResponse = await fetchProductPage(fetchImpl, options.url);
   if (!pageResponse.ok) {
+    await writeJson(join(runDir, "fetch-error.json"), {
+      url: options.url,
+      status: pageResponse.status,
+      statusText: pageResponse.statusText,
+      fetchedAt,
+      reason: "Product page fetch failed before feature extraction.",
+    });
     throw new Error(`Product page fetch failed with status ${pageResponse.status}.`);
   }
 
@@ -92,8 +101,6 @@ export async function runProductExtractionFromUrl(
       : undefined,
   });
   const specification = generateSpecificationDraft(extraction.profile);
-
-  await mkdir(runDir, { recursive: true });
 
   const profilePath = join(runDir, "profile.json");
   const draftPath = join(runDir, "draft-specification.md");
@@ -193,4 +200,23 @@ function createSuitabilityReport(profile: ProductFeatureProfile): SuitabilityRep
 
 async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function fetchProductPage(fetchImpl: typeof fetch, url: string): Promise<Response> {
+  return fetchImpl(url, {
+    headers: {
+      "accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "accept-language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+      "cache-control": "no-cache",
+      "pragma": "no-cache",
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "none",
+      "sec-fetch-user": "?1",
+      "upgrade-insecure-requests": "1",
+      "user-agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    },
+  });
 }
