@@ -27,6 +27,29 @@ test("ULTEF: fixture pipeline writes draft and compliance report", async () => {
   assert.deepEqual(compliance.findings, []);
 });
 
+test("ULTEF: monitor fixture stays product-neutral", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "spec-harness-"));
+  const fixturePath = resolve("fixtures/monitor-basic.json");
+
+  const result = await runSpecificationFixture({
+    fixturePath,
+    outputRoot,
+    runId: "monitor-run",
+  });
+
+  assert.equal(result.readiness, "draftReady");
+
+  const draft = await readFile(result.draftPath, "utf8");
+  const compliance = JSON.parse(
+    await readFile(result.complianceReportPath, "utf8"),
+  ) as { readiness: string; findings: unknown[] };
+
+  assert.match(draft, /Ekran boyutu/);
+  assert.doesNotMatch(draft, /Example Display/);
+  assert.equal(compliance.readiness, "draftReady");
+  assert.deepEqual(compliance.findings, []);
+});
+
 test("ULTEF: risky fixture creates blocked compliance report", async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), "spec-harness-"));
   const fixturePath = resolve("fixtures/desktop-ghz-risk.json");
