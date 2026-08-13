@@ -22,6 +22,7 @@ export type OpenRouterExtractorAdapterOptions = {
   fetchImpl?: typeof fetch;
   usageSink?: (usage: OpenRouterUsage) => void;
   costLedger?: ProductExtractionCostLedger;
+  requestTimeoutMs?: number;
 };
 
 type OpenRouterChatResponse = {
@@ -42,12 +43,14 @@ export function createOpenRouterProductFeatureExtractor(
 ): AiProductFeatureExtractor {
   const fetchImpl = options.fetchImpl ?? fetch;
   const model = options.model ?? productExtractorModelFromEnv();
+  const requestTimeoutMs = options.requestTimeoutMs ?? 120_000;
 
   return async (
     input: AiProductFeatureExtractionInput,
   ): Promise<AiProductFeatureExtractionOutput> => {
     const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
+      signal: AbortSignal.timeout(requestTimeoutMs),
       headers: {
         Authorization: `Bearer ${options.apiKey}`,
         "Content-Type": "application/json",
