@@ -5,26 +5,55 @@ Related issue: https://github.com/necdetoskay/bilgisayar-topla/issues/2
 
 ## Purpose
 
-After the PC build target is completed, the user may route the build into a public procurement technical specification module.
+The specification module is a generic public-procurement technical specification engine.
+
+It MUST NOT be tightly coupled to PC builds. A completed PC build is only one possible input. The same module should later support products such as printers, monitors, scanners, network devices, UPS units or other office/IT equipment.
 
 The module generates a draft technical specification and compliance report. It does not create a final legally authoritative document. Final review and approval remain with the institution/idare.
 
-## Placement In Application Flow
+## Canonical Product Specification Flow
 
-The specification module runs after build completion:
+The generic flow is:
+
+1. User states the product they want to buy.
+2. The system asks what the product will be used for.
+3. The system extracts required product capabilities.
+4. The system resolves official standards, legal/procurement rules and product-category references where applicable.
+5. The system derives a product-neutral technical feature profile.
+6. The system asks missing scope questions.
+7. The system generates product-neutral technical specification clauses.
+8. The system runs compliance checks.
+9. The system outputs a draft specification, evidence report and review-required items.
+
+## PC Build Integration Flow
+
+The PC build application may route a completed build into the specification module:
 
 1. User need is collected.
 2. Official software requirements are resolved.
 3. Hardware target profile is derived.
 4. Incehesap-compatible PC build is assembled.
 5. All selected/required properties are known.
-6. Build target is handed to the specification module.
-7. Specification module rewrites the build into procurement-safe technical language.
+6. The completed build target is handed to the generic specification module.
+7. The specification module rewrites the build into procurement-safe technical language.
 8. Compliance report flags risky clauses and missing evidence.
+
+This is an integration scenario, not the only way to use the specification module.
+
+## Standalone Product Examples
+
+The specification module should later handle requests like:
+
+- `Yazici icin teknik sartname hazirla.`
+- `Muhasebe birimi icin monitor alimi sartnamesi lazim.`
+- `Tarayici almak istiyorum, kamu alimi sartname taslagi cikar.`
+- `Kesintilere karsi UPS alimi icin teknik sartname hazirla.`
+
+For each product category, the module should first ask usage and scope questions, then derive neutral criteria.
 
 ## Boundary
 
-The build module may know selected products, exact models and exact properties.
+The upstream module may know selected products, exact models and exact properties.
 
 The specification module MUST NOT copy selected products into the final clause wording when this creates brand/model/vendor lock-in.
 
@@ -50,11 +79,12 @@ The generator MUST block or flag:
 - model names
 - vendor names
 - product family names when they create lock-in
-- exact CPU/GPU model names
+- exact CPU/GPU/model names or exact product identifiers
 - trademarked feature names when generic wording is possible
 - exact performance values copied from one selected product
 - clock-speed-driven requirements such as `3.5 GHz`
 - unnecessary socket/chipset/dimension constraints
+- product-category overfitting that points to one vendor
 - subjective words such as `fast`, `quality`, `strong`, `latest` without measurable criteria
 - clauses that inspection/acceptance cannot verify
 - clauses that conflict with procurement source rules
@@ -67,6 +97,9 @@ The generator MUST NOT produce clauses like:
 - `AMD Ryzen 5 processor`
 - `NVIDIA RTX graphics card`
 - `3.5 GHz or higher processor`
+- `HP LaserJet printer`
+- `Epson EcoTank printer`
+- `Dell monitor`
 - `X brand or equivalent`
 - `Y model or equivalent`
 
@@ -74,15 +107,28 @@ Even `or equivalent` is not a safe default when the clause first points to a bra
 
 ## Preferred Direction
 
-The generator SHOULD translate selected build capability into neutral criteria.
+The generator SHOULD translate product need and selected/known capabilities into neutral criteria.
 
 Examples:
 
-- Use workload-driven CPU class and measurable acceptance criteria instead of CPU model.
-- Use memory capacity/type requirement only when needed and inspectable.
-- Use storage capacity, interface class and endurance/warranty only when justified.
-- Use monitor size/resolution/panel/port needs only when operationally required.
-- Use generic standards instead of vendor feature names.
+- For PC: use workload-driven CPU/memory/storage/graphics criteria instead of component model.
+- For printer: use print technology class only when needed, print volume, duplex need, network need, paper size and measurable speed/quality requirements only when justified.
+- For monitor: use screen size range, resolution, panel/use-case needs, ergonomic requirements and port standards when operationally required.
+- For scanner: use document size, feeder capacity, duplex scan need, resolution and daily volume where justified.
+- For UPS: use supported load, runtime target, topology and protection requirements where justified.
+
+## Product Category Profile
+
+Each product category SHOULD have a profile defining:
+
+- required discovery questions
+- measurable feature vocabulary
+- risky lock-in words
+- acceptable standards/certifications
+- inspection/acceptance checks
+- evidence sources
+- clause templates
+- compliance tests
 
 ## Source Baseline
 
@@ -99,6 +145,8 @@ All source use must preserve provenance: URL, checkedAt, snapshot/checksum where
 
 Each specification run SHOULD produce:
 
+- product need summary
+- product feature profile
 - draft specification Markdown
 - compliance report JSON
 - evidence/proof chain JSON
@@ -112,6 +160,7 @@ Each specification run SHOULD produce:
 Suggested states:
 
 - `draftReady`: draft exists and no hard gate failed
+- `needsClarification`: missing usage/scope input prevents safe draft
 - `reviewRequired`: draft exists but legal/policy/human review is needed
 - `blocked`: hard gate failure prevents draft readiness
 
@@ -125,3 +174,5 @@ Minimum tests:
 - vague/unverifiable wording is flagged
 - legal source lineage survives draft generation
 - AI output cannot self-approve final specification
+- standalone product request can create a feature profile without PC build input
+- product category risky terms are detected
