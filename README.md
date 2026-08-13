@@ -2,15 +2,16 @@
 
 Incehesap bilgisayar toplama sayfasini kullanarak, kullanicinin butcesi ve kullanim amacina gore en iyi bilgisayar konfigurasyonlarini oneren AI destekli agent projesi.
 
-Projenin ilk hedefi, dogrudan koddan once saglam bir karar ve otomasyon mimarisi olusturmaktir. Sistem; Incehesap toplama akisini Playwright ile okuyacak, sitenin kendi uyumluluk filtrelerinden yararlanacak, parcalari butce ve kullanim amacina gore puanlayacak ve kullaniciya aciklanabilir sistem onerileri sunacaktir.
+Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek yazilim/is yuku ihtiyacini anlayacak, resmi yazilim gereksinimlerini kanit olarak kullanacak, buna gore donanim hedef profili cikaracak, Incehesap uzerinden uyumlu sistem toplayacak ve istenirse toplanan bilgisayari kamu alimi icin marka/model isaret etmeyen teknik sartname taslagina donusturecektir.
 
 ## Temel Yaklasim
 
 - Veri kaynagi: Incehesap bilgisayar toplama sayfasi.
 - Otomasyon: Playwright tabanli browser agent.
-- Karar motoru: Kural tabanli uyumluluk ve skor motoru.
-- AI rolu: Strateji secimi, aciklama, alternatif yorumlama ve hata raporlama.
-- Ilk kapsam: Koddan once master plan, mimari ve MVP sprint dokumantasyonu.
+- Gereksinim modeli: Resmi yazilim gereksinimleri ve kanit zinciri.
+- Karar motoru: Kural tabanli uyumluluk, hedef profil ve skor motoru.
+- AI rolu: Ihtiyac ayrisma, aciklama, alternatif yorumlama ve hata raporlama. AI kanitsiz kesin gereksinim veya sartname maddesi uretmez.
+- Sartname rolu: Tamamlanmis build hedefini kamu alimi diline cevirir; marka/model/vendor/hiz isaretleyen ifadeleri engeller veya review-required yapar.
 
 ## Dokumanlar
 
@@ -29,10 +30,27 @@ Projenin ilk hedefi, dogrudan koddan once saglam bir karar ve otomasyon mimarisi
 - [Selector Sozlesmesi](docs/12-selector-contract.md)
 - [Scraper Probe Output Contract](docs/13-scraper-probe-output-contract.md)
 - [Selection Chain Probe](docs/14-selection-chain-probe.md)
+- [Requirement-First Build Flow](docs/15-requirement-first-build-flow.md)
+- [Official Source Evidence Model](docs/16-official-source-evidence-model.md)
+- [Public Procurement Specification Flow](docs/17-public-procurement-specification-flow.md)
+- [Implementation Work Packages](docs/18-implementation-work-packages.md)
+
+## Takip Issue'lari
+
+- [Requirement-first evidence-based PC build flow](https://github.com/necdetoskay/bilgisayar-topla/issues/1)
+- [Public procurement technical specification generator](https://github.com/necdetoskay/bilgisayar-topla/issues/2)
 
 ## Mevcut Durum
 
-Bu repo henuz planlama ve tasarim asamasindadir. Ilk uygulama hedefi, Incehesap konfigurator sayfasinda kategori akisini okuyabilen ve secim zincirini dogrulayabilen kucuk bir teknik prototiptir.
+Repo planlama, tasarim ve ilk teknik prototip asamasindadir. Ilk scraper prototipi, Incehesap konfigurator sayfasinda kategori akisini okuyabilen ve secim zincirini dogrulayabilen kucuk bir teknik kanittir.
+
+Yeni ana uygulama yonu:
+
+1. Kullanicinin yazilim/is yuku ihtiyacini al.
+2. Resmi kaynaklardan minimum ve onerilen gereksinimleri cikar.
+3. Kanitli donanim hedef profili olustur.
+4. Incehesap uzerinden uyumlu sistemi topla.
+5. Gerekiyorsa kamu alimi teknik sartname taslagina aktar.
 
 ## Ilk Scraper Prototipi
 
