@@ -8,11 +8,12 @@ import {
 import type { ProductExtractionCostRecord } from "./cost-ledger.js";
 
 test("ULTEF: OpenRouter adapter calls configured DeepSeek model and parses JSON", async () => {
-  const calls: Array<{ url: string; body: unknown }> = [];
+  const calls: Array<{ url: string; body: unknown; signal?: AbortSignal | null }> = [];
   const fetchImpl: typeof fetch = async (url, init) => {
     calls.push({
       url: String(url),
       body: JSON.parse(String(init?.body)),
+      signal: init?.signal,
     });
 
     return new Response(
@@ -52,6 +53,7 @@ test("ULTEF: OpenRouter adapter calls configured DeepSeek model and parses JSON"
     apiKey: "test-key",
     model: "deepseek/deepseek-v4-flash",
     fetchImpl,
+    requestTimeoutMs: 30_000,
     usageSink: (usage) => usages.push(usage),
     costLedger: {
       record: (record) => {
@@ -70,6 +72,7 @@ test("ULTEF: OpenRouter adapter calls configured DeepSeek model and parses JSON"
   assert.equal(result.productCategory, "monitor");
   assert.equal(result.features.length, 1);
   assert.equal(calls[0]?.url, "https://openrouter.ai/api/v1/chat/completions");
+  assert.ok(calls[0]?.signal);
   assert.equal((calls[0]?.body as { model?: string }).model, "deepseek/deepseek-v4-flash");
   assert.deepEqual(usages[0], {
     promptTokens: 100,
