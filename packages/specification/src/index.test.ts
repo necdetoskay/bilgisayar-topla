@@ -118,3 +118,35 @@ test("ULTEF: GHz based clause output is blocked", () => {
     true,
   );
 });
+
+test("ULTEF: suggested suitability clause text is used when provided", () => {
+  const profile = printerProfile();
+  profile.productCategory = "monitor";
+  profile.features[0] = {
+    key: "monitor.refreshRate",
+    label: "Yenileme hizi",
+    value: 165,
+    unit: "hz",
+    group: "display",
+    requirementLevel: "required",
+    sourceRefIds: ["manual-001"],
+    lockInRisk: "low",
+    clauseEligible: true,
+    specSuitability: {
+      featureClass: "technicalRequired",
+      decision: "include",
+      reason: "Observable technical performance criterion.",
+      riskLevel: "low",
+      suggestedClauseText: "Monitorun ekran yenileme hizi en az 144 Hz olmalidir.",
+      confidence: 0.86,
+    },
+  };
+
+  const result = generateSpecificationDraft(profile);
+
+  assert.equal(result.readiness, "draftReady");
+  assert.match(
+    result.draft?.markdown ?? "",
+    /Monitorun ekran yenileme hizi en az 144 Hz olmalidir\./,
+  );
+});

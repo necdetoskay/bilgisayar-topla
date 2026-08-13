@@ -15,6 +15,15 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/product-extractor:
+    dependencies:
+      '@bilgisayar-topla/shared-contracts':
+        specifier: workspace:*
+        version: link:../shared-contracts
+      '@bilgisayar-topla/specification':
+        specifier: workspace:*
+        version: link:../specification
+
   packages/scraper:
     dependencies:
       playwright:
@@ -30,12 +39,6 @@ importers:
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
-
-  packages/product-extractor:
-    dependencies:
-      '@bilgisayar-topla/shared-contracts':
-        specifier: workspace:*
-        version: link:../shared-contracts
 
   packages/shared-contracts: {}
 

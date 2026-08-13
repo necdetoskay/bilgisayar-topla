@@ -111,6 +111,66 @@ test("ULTEF: AI extracted brand/model fields are kept out of clauses", async () 
   );
 });
 
+test("ULTEF: commercial and marketing features are excluded from specification clauses", async () => {
+  const aiExtractor: AiProductFeatureExtractor = async () => ({
+    productCategory: "monitor",
+    identity: {
+      title: "Example Display Office Monitor",
+      brand: "Example Display",
+      model: "ED-24",
+    },
+    features: [
+      {
+        label: "Yenileme hizi",
+        value: 165,
+        unit: "hz",
+        specSuitability: {
+          featureClass: "technicalRequired",
+          decision: "include",
+          reason: "Observable display performance value.",
+          riskLevel: "low",
+          suggestedClauseText:
+            "Monitorun ekran yenileme hizi en az 144 Hz olmalidir.",
+          confidence: 0.86,
+        },
+      },
+      {
+        label: "Sepette indirim",
+        value: "%10",
+      },
+      {
+        label: "Oyuncular icin mukemmel deneyim",
+        value: true,
+      },
+    ],
+  });
+
+  const result = await extractProductFeatureProfile({
+    url: "https://example.test/products/monitor-165",
+    html: productHtml,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+    aiExtractor,
+  });
+
+  assert.equal(result.validation.valid, true);
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Yenileme hizi")
+      ?.clauseEligible,
+    true,
+  );
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Sepette indirim")
+      ?.specSuitability?.featureClass,
+    "commercial",
+  );
+  assert.equal(
+    result.profile.features.find((feature) =>
+      feature.label.includes("mukemmel"),
+    )?.clauseEligible,
+    false,
+  );
+});
+
 test("ULTEF: extractor falls back to structured page data without AI", async () => {
   const result = await extractProductFeatureProfile({
     url: "https://example.test/products/monitor-24",
@@ -200,5 +260,86 @@ test("ULTEF: Hepsiburada redux product state extracts real product variants", as
       { label: "SSD Kapasitesi", value: 256, unit: "gb" },
       { label: "Ram (Sistem Belleği)", value: 8, unit: "gb" },
     ],
+  );
+});
+
+test("ULTEF: notebook cooler page does not turn commercial fields into clauses", async () => {
+  const html = `
+    <html>
+      <head><title>Frisby FNC-5260ST 6 Fanli Sessiz Aluminyum Izgara Notebook Sogutucu Stand 17 Uyumlu</title></head>
+      <body>
+        <h1>Frisby FNC-5260ST 6 Fanli Sessiz Aluminyum Izgara Notebook Sogutucu Stand 17 Uyumlu</h1>
+        <table>
+          <tr><th>Fan sayisi</th><td>6</td></tr>
+          <tr><th>Notebook uyumlulugu</th><td>17 inc</td></tr>
+          <tr><th>Mensei</th><td>CN - Cin Halk Cumhuriyeti</td></tr>
+          <tr><th>Yurt Disi Satis</th><td>Yok</td></tr>
+          <tr><th>Stok Adedi</th><td>20 adetten az</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const result = await extractProductFeatureProfile({
+    url: "https://www.hepsiburada.com/frisby-notebook-sogutucu-p-HBC00009NBEP6",
+    html,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+  });
+
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.profile.productCategory, "other");
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Fan sayisi")
+      ?.clauseEligible,
+    true,
+  );
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Mensei")
+      ?.clauseEligible,
+    false,
+  );
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Yurt Disi Satis")
+      ?.clauseEligible,
+    false,
+  );
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Stok Adedi")
+      ?.clauseEligible,
+    false,
+  );
+});
+
+test("ULTEF: tablet case variant selector does not become a specification clause", async () => {
+  const html = `
+    <html>
+      <head><title>Samsung Galaxy Tab A9 Plus 11 Inc Tablet Kilifi Smart Standli Kapakli</title></head>
+      <body>
+        <h1>Samsung Galaxy Tab A9 Plus 11 Inc Tablet Kilifi Smart Standli Pu Deri Pc Yari Saydam Hafif Slim Kapakli SM-X210</h1>
+        <table>
+          <tr><th>Seçenek</th><td>Samsung Galaxy Tab A9 Plus 11İnç</td></tr>
+          <tr><th>Renk</th><td>Siyah</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const result = await extractProductFeatureProfile({
+    url: "https://www.hepsiburada.com/tablet-kilifi-p-HBCV00005TBR33",
+    html,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+  });
+
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.profile.productCategory, "other");
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Seçenek")
+      ?.clauseEligible,
+    false,
+  );
+  assert.equal(
+    result.profile.features.find((feature) => feature.label === "Seçenek")
+      ?.specSuitability?.decision,
+    "review",
   );
 });

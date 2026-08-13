@@ -5,6 +5,8 @@ import {
   type ProductCategory,
   type ProductFeature,
   type ProductFeatureProfile,
+  type SpecFeatureClass,
+  type SpecSuitabilityDecision,
   type ValidationResult,
   validateProductFeatureProfile,
 } from "@bilgisayar-topla/shared-contracts";
@@ -57,6 +59,16 @@ export type ExtractedSpec = {
   label: string;
   value: string | number | boolean;
   unit?: string;
+  specSuitability?: ExtractedSpecSuitability;
+};
+
+export type ExtractedSpecSuitability = {
+  featureClass: SpecFeatureClass;
+  decision: SpecSuitabilityDecision;
+  reason: string;
+  riskLevel?: LockInRisk;
+  suggestedClauseText?: string;
+  confidence?: number;
 };
 
 type HepsiburadaProductState = {
@@ -300,7 +312,8 @@ function toProductFeature(
   spec: ExtractedSpec,
   evidenceId: string,
 ): ProductFeature {
-  const risk = lockInRisk(spec);
+  const suitability = assessSpecSuitability(spec);
+  const risk = suitability.riskLevel;
 
   return {
     key: `${category}.${slug(spec.label)}`,
@@ -308,17 +321,149 @@ function toProductFeature(
     value: spec.value,
     unit: spec.unit,
     group: category,
-    requirementLevel: risk === "high" ? "informational" : "required",
+    requirementLevel:
+      suitability.decision === "include"
+        ? "required"
+        : suitability.decision === "review"
+          ? "preferred"
+          : "informational",
     sourceRefIds: [evidenceId],
     lockInRisk: risk,
-    clauseEligible: risk !== "high",
+    clauseEligible: suitability.decision === "include" && risk !== "high",
+    specSuitability: suitability,
   };
 }
 
-function lockInRisk(spec: ExtractedSpec): LockInRisk {
+function assessSpecSuitability(
+  spec: ExtractedSpec,
+): NonNullable<ProductFeature["specSuitability"]> {
+  const aiSuitability = normalizeAiSuitability(spec.specSuitability);
+  if (aiSuitability) {
+    return aiSuitability;
+  }
+
   const label = spec.label.toLocaleLowerCase("tr-TR");
-  if (/\b(marka|brand|model|sku|part number|urun kodu|seri)\b/i.test(label)) {
+  const value = String(spec.value).toLocaleLowerCase("tr-TR");
+  const text = `${label} ${value}`;
+
+  if (/(secenek|seçenek|varyant|variant)/i.test(label)) {
+    return {
+      featureClass: "unknown",
+      decision: "review",
+      reason: "Marketplace variant selectors may contain alternative products, colors or brand/model compatibility options and should not automatically become specification clauses.",
+      riskLevel: "high",
+      confidence: 0.9,
+    };
+  }
+
+  if (/\b(intel|amd|nvidia|rtx|ryzen|core ultra|core i[3579])\b/i.test(text)) {
+    return {
+      featureClass: "technicalPreferred",
+      decision: "review",
+      reason: "Exact processor, GPU or vendor technology names can create product lock-in and should be generalized before clause generation.",
+      riskLevel: "high",
+      confidence: 0.9,
+    };
+  }
+
+  if (/\b(marka|brand|model|sku|part number|urun kodu|ürün kodu|seri|satici|satıcı)\b/i.test(text)) {
+    return {
+      featureClass: "identity",
+      decision: "exclude",
+      reason: "Brand, model, SKU, serial or seller identifiers can create product lock-in.",
+      riskLevel: "high",
+      confidence: 0.95,
+    };
+  }
+
+  if (/(fiyat|kampanya|indirim|stok|kargo|teslimat|taksit|kupon|sepet|yurt disi satis|yurt dışı satış)/i.test(text)) {
+    return {
+      featureClass: "commercial",
+      decision: "exclude",
+      reason: "Commercial page data is not a stable technical specification criterion.",
+      riskLevel: "high",
+      confidence: 0.92,
+    };
+  }
+
+  if (/(mensei|menşei|origin|ulke|ülke)/i.test(label)) {
+    return {
+      featureClass: "unknown",
+      decision: "review",
+      reason: "Country-of-origin data is not a technical performance requirement and should only be used when a lawful procurement reason exists.",
+      riskLevel: "medium",
+      confidence: 0.82,
+    };
+  }
+
+  if (/(renk|color|tasarim|tasarım|görünüm|gorunum)/i.test(text)) {
+    return {
+      featureClass: "cosmetic",
+      decision: "review",
+      reason: "Cosmetic properties are usually not technical requirements unless the need explicitly depends on them.",
+      riskLevel: "medium",
+      confidence: 0.8,
+    };
+  }
+
+  if (/(mukemmel|mükemmel|ustun|üstün|profesyonel deneyim|oyuncular icin|oyuncular için)/i.test(text)) {
+    return {
+      featureClass: "marketing",
+      decision: "exclude",
+      reason: "Marketing claims are subjective and not directly measurable during acceptance.",
+      riskLevel: "medium",
+      confidence: 0.85,
+    };
+  }
+
+  if (/(ce\b|eac\b|rohs|iso|tse|garanti|enerji sinifi|enerji sınıfı|sertifika)/i.test(text)) {
+    return {
+      featureClass: "standardOrCompliance",
+      decision: "review",
+      reason: "Standards, warranty and compliance details can be useful but should be checked against category policy and current rules.",
+      riskLevel: "medium",
+      confidence: 0.78,
+    };
+  }
+
+  return {
+    featureClass: "technicalRequired",
+    decision: "include",
+    reason: "The feature appears to be an observable technical property.",
+    riskLevel: "low",
+    confidence: 0.82,
+  };
+}
+
+function normalizeAiSuitability(
+  suitability: ExtractedSpecSuitability | undefined,
+): NonNullable<ProductFeature["specSuitability"]> | undefined {
+  if (!suitability || !suitability.reason) {
+    return undefined;
+  }
+
+  const riskLevel = suitability.riskLevel ?? decisionToRisk(suitability.decision);
+  const decision =
+    riskLevel === "high" && suitability.decision === "include"
+      ? "review"
+      : suitability.decision;
+
+  return {
+    featureClass: suitability.featureClass,
+    decision,
+    reason: suitability.reason,
+    riskLevel,
+    suggestedClauseText: suitability.suggestedClauseText,
+    confidence: suitability.confidence,
+  };
+}
+
+function decisionToRisk(decision: SpecSuitabilityDecision): LockInRisk {
+  if (decision === "exclude") {
     return "high";
+  }
+  if (decision === "review") {
+    return "medium";
   }
   return "low";
 }
@@ -326,6 +471,15 @@ function lockInRisk(spec: ExtractedSpec): LockInRisk {
 function inferCategory(text: string): ProductCategory {
   const normalized = text.toLocaleLowerCase("tr-TR");
 
+  if (/(all in one|aio|hepsi bir arada).*(bilgisayar|computer)|(bilgisayar|computer).*(all in one|aio|hepsi bir arada)/i.test(normalized)) {
+    return "desktopComputer";
+  }
+  if (/(tablet|ipad).*(kilif|kılıf|kapak|stand)|(kilif|kılıf|kapak).*(tablet|ipad)/i.test(normalized)) {
+    return "other";
+  }
+  if (/(notebook|laptop|dizustu|dizüstü).*(sogutucu|soğutucu|stand|aksesuar)|(sogutucu|soğutucu|stand|aksesuar).*(notebook|laptop|dizustu|dizüstü)/i.test(normalized)) {
+    return "other";
+  }
   if (/(printer|yazici|yazıcı)/i.test(normalized)) {
     return "printer";
   }

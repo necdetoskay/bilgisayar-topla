@@ -5,13 +5,18 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "product-extractor-url": "dist/url-runner-cli.js"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm --filter @bilgisayar-topla/specification run build && tsc -p tsconfig.json",
+    "run:url": "pnpm run build && node dist/url-runner-cli.js",
     "smoke:openrouter": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm run build && node dist/openrouter-smoke.js",
     "test": "pnpm run build && node --test dist/**/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@bilgisayar-topla/shared-contracts": "workspace:*"
+    "@bilgisayar-topla/shared-contracts": "workspace:*",
+    "@bilgisayar-topla/specification": "workspace:*"
   }
 }

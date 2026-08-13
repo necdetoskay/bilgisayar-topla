@@ -32,6 +32,19 @@ export type EvidenceQualityState =
 
 export type RequirementLevel = "required" | "preferred" | "informational";
 export type LockInRisk = "none" | "low" | "medium" | "high";
+export type SpecFeatureClass =
+  | "technicalRequired"
+  | "technicalPreferred"
+  | "identity"
+  | "commercial"
+  | "cosmetic"
+  | "marketing"
+  | "standardOrCompliance"
+  | "unknown";
+export type SpecSuitabilityDecision =
+  | "include"
+  | "review"
+  | "exclude";
 export type ProfileReadiness =
   | "readyForSpecification"
   | "needsMoreFeatures"
@@ -63,6 +76,14 @@ export type ProductFeature = {
   sourceRefIds: string[];
   lockInRisk?: LockInRisk;
   clauseEligible: boolean;
+  specSuitability?: {
+    featureClass: SpecFeatureClass;
+    decision: SpecSuitabilityDecision;
+    reason: string;
+    riskLevel: LockInRisk;
+    suggestedClauseText?: string;
+    confidence?: number;
+  };
 };
 
 export type EvidenceReference = {

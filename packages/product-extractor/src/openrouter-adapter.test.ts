@@ -90,6 +90,10 @@ test("ULTEF: product extraction prompt blocks invented values and brand/model cl
   const prompt = productExtractionSystemPrompt();
 
   assert.match(prompt, /Do not invent missing values/);
+  assert.match(prompt, /Do not extract technical feature values from the title alone/);
   assert.match(prompt, /brand, model, SKU/);
-  assert.match(prompt, /Return only JSON/);
+  assert.match(prompt, /marketplace variant selectors such as Seçenek/);
+  assert.match(prompt, /Intel Core Ultra 5 226V -> review/);
+  assert.match(prompt, /Stok adedi, fiyat, sepette indirim, satici -> exclude/);
+  assert.match(prompt, /Return only valid JSON/);
 });
