@@ -11,7 +11,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - Gereksinim modeli: Resmi yazilim gereksinimleri ve kanit zinciri.
 - Ortak veri sozlesmesi: Tum urun/cihaz ozellikleri `ProductFeatureProfile` yapisina normalize edilir.
 - Karar motoru: Kural tabanli uyumluluk, hedef profil ve skor motoru.
-- AI rolu: Ihtiyac ayrisma, aciklama, alternatif yorumlama ve hata raporlama. AI kanitsiz kesin gereksinim veya sartname maddesi uretmez.
+- AI rolu: Capability bazli model yonlendirme ile ihtiyac ayrisma, teknik yorumlama, kaynak arastirma, sartname taslagi ve uygunluk destek islemleri yapar. AI kanitsiz kesin gereksinim veya sartname maddesi uretmez.
 - Sartname rolu: Sadece hazir `ProductFeatureProfile` girdisini kamu alimi diline cevirir; marka/model/vendor/hiz isaretleyen ifadeleri engeller veya review-required yapar.
 
 ## Dokumanlar
@@ -36,6 +36,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - [Public Procurement Specification Flow](docs/17-public-procurement-specification-flow.md)
 - [Implementation Work Packages](docs/18-implementation-work-packages.md)
 - [Product Feature Profile Contract](docs/19-product-feature-profile-contract.md)
+- [AI Capability Routing Profile](docs/20-ai-capability-routing.md)
 
 ## Takip Issue'lari
 
