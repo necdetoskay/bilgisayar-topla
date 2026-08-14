@@ -43,6 +43,8 @@ type TimingReport = {
   totalMs: number;
   aiTimeoutMs?: number;
   model?: string;
+  attemptedModels?: string[];
+  successfulModel?: string;
   extractionMode?: "ai" | "structuredFallback";
 };
 
@@ -82,6 +84,9 @@ export async function runProductExtractionFromUrl(
   const costRecords: ProductExtractionCostRecord[] = [];
   const apiKey = env.OPENROUTER_API_KEY;
   const model = productExtractorModelFromEnv(env);
+  const modelCandidates = productExtractorModelCandidatesFromEnv(env, model);
+  const attemptedModels: string[] = [];
+  let successfulModel: string | undefined;
   const aiTimeoutMs = productExtractorTimeoutFromEnv(env);
   const startedAtMs = nowMs();
 
@@ -112,13 +117,27 @@ export async function runProductExtractionFromUrl(
     locale: options.locale ?? "tr-TR",
     intendedUseSummary: options.intendedUseSummary,
     aiExtractor: apiKey
-      ? createOpenRouterProductFeatureExtractor({
-          apiKey,
-          model,
-          fetchImpl,
-          costLedger: createInMemoryCostLedger(costRecords),
-          requestTimeoutMs: aiTimeoutMs,
-        })
+      ? async (input) => {
+          const errors: string[] = [];
+          for (const candidate of modelCandidates) {
+            attemptedModels.push(candidate);
+            try {
+              const output = await createOpenRouterProductFeatureExtractor({
+                apiKey,
+                model: candidate,
+                fetchImpl,
+                costLedger: createInMemoryCostLedger(costRecords),
+                requestTimeoutMs: aiTimeoutMs,
+              })(input);
+              successfulModel = candidate;
+              return output;
+            } catch (error) {
+              errors.push(`${candidate}: ${errorMessage(error)}`);
+            }
+          }
+
+          throw new Error(`All OpenRouter model attempts failed. ${errors.join(" | ")}`);
+        }
       : undefined,
   });
   const extractionFinishedAtMs = nowMs();
@@ -140,6 +159,8 @@ export async function runProductExtractionFromUrl(
     totalMs: elapsedMs(startedAtMs, nowMs()),
     aiTimeoutMs: apiKey ? aiTimeoutMs : undefined,
     model: apiKey ? model : undefined,
+    attemptedModels: apiKey ? attemptedModels : undefined,
+    successfulModel,
     extractionMode: extraction.extractionMode,
   };
 
@@ -204,12 +225,42 @@ function productExtractorTimeoutFromEnv(env: NodeJS.ProcessEnv): number {
   return Number.isFinite(value) && value > 0 ? value : 30_000;
 }
 
+function productExtractorModelCandidatesFromEnv(
+  env: NodeJS.ProcessEnv,
+  primaryModel: string,
+): string[] {
+  const retryCount = productExtractorRetryCountFromEnv(env);
+  const fallbackModels = (env.PRODUCT_EXTRACTOR_FALLBACK_MODELS ?? "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+
+  return [
+    ...Array.from({ length: retryCount + 1 }, () => primaryModel),
+    ...fallbackModels,
+  ];
+}
+
+function productExtractorRetryCountFromEnv(env: NodeJS.ProcessEnv): number {
+  const rawValue = env.PRODUCT_EXTRACTOR_MODEL_RETRY_COUNT;
+  if (!rawValue) {
+    return 1;
+  }
+
+  const value = Number(rawValue);
+  return Number.isInteger(value) && value >= 0 ? value : 1;
+}
+
 function nowMs(): number {
   return Date.now();
 }
 
 function elapsedMs(startedAtMs: number, finishedAtMs: number): number {
   return Math.max(0, Math.round(finishedAtMs - startedAtMs));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function createSuitabilityReport(profile: ProductFeatureProfile): SuitabilityReport {
