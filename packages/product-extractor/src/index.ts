@@ -80,7 +80,7 @@ type HepsiburadaProductState = {
   variants?: unknown;
 };
 
-const MAX_AI_PAGE_TEXT_CHARS = 60_000;
+const MAX_AI_PAGE_TEXT_CHARS = 12_000;
 
 export async function extractProductFeatureProfile(
   input: ProductExtractionInput,
@@ -93,6 +93,7 @@ export async function extractProductFeatureProfile(
   const structuredSpecs = dedupeSpecs([
     ...extractHepsiburadaSpecs(hepsiburadaProduct),
     ...extractTableSpecs(html),
+    ...extractDefinitionLikeSpecs(html),
   ]);
   let aiOutput: AiProductFeatureExtractionOutput | undefined;
   const aiGaps: NonNullable<AiProductFeatureExtractionOutput["gaps"]> = [];
@@ -100,7 +101,11 @@ export async function extractProductFeatureProfile(
     try {
       aiOutput = await input.aiExtractor({
         url: input.url,
-        htmlText: prepareAiPageText(normalizeText(html)),
+        htmlText: prepareAiPageText({
+          html,
+          product: hepsiburadaProduct,
+          structuredSpecs,
+        }),
         fetchedAt: checkedAt,
         locale: input.locale ?? "tr-TR",
         intendedUseSummary: input.intendedUseSummary,
@@ -252,15 +257,15 @@ function extractHepsiburadaVariantProperty(variant: unknown): ExtractedSpec[] {
     return [];
   }
 
-    const label = stringValue(variant.displayName) ?? stringValue(variant.name);
-    const valueObject = variant.valueObject;
-    const rawValue = isRecord(valueObject)
-      ? stringValue(valueObject.actualValue)
-      : stringValue(variant.value);
-    const normalized = normalizeValue(rawValue);
-    if (!label || !normalized) {
-      return [];
-    }
+  const label = stringValue(variant.displayName) ?? stringValue(variant.name);
+  const valueObject = variant.valueObject;
+  const rawValue = isRecord(valueObject)
+    ? stringValue(valueObject.actualValue)
+    : stringValue(variant.value);
+  const normalized = normalizeValue(rawValue);
+  if (!label || !normalized) {
+    return [];
+  }
 
   return [
     {
@@ -321,6 +326,43 @@ function extractTableSpecs(html: string): ExtractedSpec[] {
   }
 
   return specs;
+}
+
+function extractDefinitionLikeSpecs(html: string): ExtractedSpec[] {
+  const specs: ExtractedSpec[] = [];
+  const pairPattern =
+    /<div[^>]*>\s*((?:(?!<div\b)[\s\S])*?)\s*<\/div>\s*<div[^>]*>\s*((?:(?!<div\b)[\s\S])*?)\s*<\/div>/gi;
+
+  for (const pairMatch of html.matchAll(pairPattern)) {
+    const label = normalizeText(pairMatch[1] ?? "");
+    const rawValue = normalizeText(pairMatch[2] ?? "");
+    if (!looksLikeSpecLabel(label) || !rawValue || rawValue.length > 120) {
+      continue;
+    }
+
+    const normalized = normalizeValue(rawValue);
+    if (!normalized) {
+      continue;
+    }
+
+    specs.push({
+      label,
+      value: normalized.value,
+      unit: normalized.unit,
+    });
+  }
+
+  return specs;
+}
+
+function looksLikeSpecLabel(label: string): boolean {
+  if (label.length < 2 || label.length > 80) {
+    return false;
+  }
+
+  return /(ekran|çözünürlük|cozunurluk|işlemci|islemci|bellek|ram|ssd|disk|depolama|usb|hdmi|webcam|ağırlık|agirlik|dokunmatik|panel|kart okuyucu|işletim sistemi|isletim sistemi|renk|menşei|mensei)/i.test(
+    label,
+  );
 }
 
 function toProductFeature(
@@ -487,7 +529,7 @@ function decisionToRisk(decision: SpecSuitabilityDecision): LockInRisk {
 function inferCategory(text: string): ProductCategory {
   const normalized = text.toLocaleLowerCase("tr-TR");
 
-  if (/(all in one|aio|hepsi bir arada).*(bilgisayar|computer)|(bilgisayar|computer).*(all in one|aio|hepsi bir arada)/i.test(normalized)) {
+  if (/(all in one|all-in-one|aio|hepsi bir arada|monitor pc|monitör pc).*(bilgisayar|computer)?|(bilgisayar|computer).*(all in one|all-in-one|aio|hepsi bir arada|monitor pc|monitör pc)/i.test(normalized)) {
     return "desktopComputer";
   }
   if (/(tablet|ipad).*(kilif|kılıf|kapak|stand)|(kilif|kılıf|kapak).*(tablet|ipad)/i.test(normalized)) {
@@ -604,30 +646,89 @@ function normalizeText(html: string): string {
     .trim();
 }
 
-function prepareAiPageText(text: string): string {
-  if (text.length <= MAX_AI_PAGE_TEXT_CHARS) {
-    return text;
+function prepareAiPageText(input: {
+  html: string;
+  product: HepsiburadaProductState | undefined;
+  structuredSpecs: ExtractedSpec[];
+}): string {
+  const text = normalizeText(input.html);
+  const categoryText = hepsiburadaCategoryText(input.product);
+  const evidence = [
+    "Product extraction evidence package.",
+    "Use structured specs and visible product-information snippets as technical evidence.",
+    "Do not promote title-only identity hints into technical specification clauses.",
+    `Product name: ${stringValue(input.product?.name) ?? extractTitle(input.html) ?? "unknown"}`,
+    `Brand: ${stringValue(input.product?.brand) ?? "unknown"}`,
+    `SKU: ${stringValue(input.product?.sku) ?? "unknown"}`,
+    `Barcode: ${stringValue(input.product?.barcode) ?? "unknown"}`,
+    `Category evidence: ${categoryText || "unknown"}`,
+    "Structured specs:",
+    ...input.structuredSpecs
+      .slice(0, 80)
+      .map((spec) => `- ${spec.label}: ${formatSpecValue(spec)}`),
+    "Visible page summary:",
+    trimCommercialTail(text.slice(0, 1_000)),
+    "Visible product-information snippets:",
+    ...extractRelevantTextWindows(text).map((window) => `---\n${window}`),
+  ].join("\n");
+
+  if (evidence.length <= MAX_AI_PAGE_TEXT_CHARS) {
+    return evidence;
   }
 
-  const productInfoIndex = findFirstIndex(text, [
+  return evidence.slice(0, MAX_AI_PAGE_TEXT_CHARS);
+}
+
+function formatSpecValue(spec: ExtractedSpec): string {
+  return [String(spec.value), spec.unit].filter(Boolean).join(" ");
+}
+
+function extractRelevantTextWindows(text: string): string[] {
+  const windows: string[] = [];
+  const needles = [
     "Ürün Bilgileri",
     "Urun Bilgileri",
     "Ürün özellikleri",
     "Urun ozellikleri",
     "Teknik Özellikler",
     "Teknik Ozellikler",
-  ]);
+    "Ekran Boyutu",
+    "SSD Kapasitesi",
+    "Ram",
+    "İşlemci Tipi",
+    "Çözünürlük",
+  ];
 
-  if (productInfoIndex >= 0) {
-    const prefix = text.slice(0, 8_000);
-    const featureWindow = text.slice(
-      Math.max(0, productInfoIndex - 2_000),
-      productInfoIndex + MAX_AI_PAGE_TEXT_CHARS - prefix.length,
+  for (const needle of needles) {
+    const index = text.indexOf(needle);
+    if (index < 0) {
+      continue;
+    }
+    const window = trimCommercialTail(
+      text.slice(Math.max(0, index - 300), index + 800),
     );
-    return `${prefix}\n\n${featureWindow}`.slice(0, MAX_AI_PAGE_TEXT_CHARS);
+    if (!windows.some((seen) => seen.includes(needle))) {
+      windows.push(window);
+    }
   }
 
-  return text.slice(0, MAX_AI_PAGE_TEXT_CHARS);
+  return windows.slice(0, 4);
+}
+
+function trimCommercialTail(text: string): string {
+  const commercialIndex = findFirstIndex(text, [
+    "Kampanya",
+    "Sepet",
+    "Stok",
+    "Taksit",
+    "Kargo",
+    "Teslimat",
+  ]);
+  if (commercialIndex < 0) {
+    return text;
+  }
+
+  return text.slice(0, commercialIndex).trim();
 }
 
 function findFirstIndex(text: string, needles: string[]): number {
