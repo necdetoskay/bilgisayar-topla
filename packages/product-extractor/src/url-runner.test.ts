@@ -73,3 +73,100 @@ test("ULTEF: URL runner writes profile, suitability report and draft", async () 
   assert.match(draft, /Fan sayisi/);
   assert.doesNotMatch(draft, /Frisby|Stok Adedi|Renk/);
 });
+
+test("ULTEF: URL runner retries OpenRouter model before structured fallback", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "product-url-runner-retry-"));
+  const openRouterRequests: unknown[] = [];
+  let openRouterCallCount = 0;
+  const fetchImpl: typeof fetch = async (url, init) => {
+    if (String(url) === "https://openrouter.ai/api/v1/chat/completions") {
+      openRouterCallCount += 1;
+      openRouterRequests.push(JSON.parse(String(init?.body)));
+      if (openRouterCallCount === 1) {
+        return new Response("temporary upstream timeout", { status: 504 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  productCategory: "desktopComputer",
+                  identity: { title: "Example All In One" },
+                  features: [
+                    {
+                      label: "Bellek",
+                      value: 16,
+                      unit: "GB",
+                      specSuitability: {
+                        featureClass: "technicalRequired",
+                        decision: "include",
+                        reason: "Specification table value.",
+                        riskLevel: "low",
+                        suggestedClauseText:
+                          "Bilgisayar en az 16 GB sistem bellegine sahip olmalidir.",
+                        confidence: 0.9,
+                      },
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 200,
+            total_tokens: 1200,
+          },
+        }),
+        { status: 200 },
+      );
+    }
+
+    return new Response(
+      `
+        <html>
+          <body>
+            <h1>Example All In One</h1>
+            <table><tr><th>Bellek</th><td>16 GB</td></tr></table>
+          </body>
+        </html>
+      `,
+      { status: 200 },
+    );
+  };
+
+  const result = await runProductExtractionFromUrl({
+    url: "https://example.test/products/aio",
+    outputRoot,
+    runId: "url-runner-retry-test",
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+    fetchImpl,
+    env: {
+      OPENROUTER_API_KEY: "test-key",
+      PRODUCT_EXTRACTOR_MODEL: "deepseek/deepseek-v4-flash",
+      PRODUCT_EXTRACTOR_AI_TIMEOUT_MS: "30000",
+    },
+  });
+
+  const timing = JSON.parse(await readFile(result.timingReportPath, "utf8")) as {
+    attemptedModels: string[];
+    successfulModel: string;
+  };
+  const costLedger = await readFile(result.costLedgerPath ?? "", "utf8");
+
+  assert.equal(result.extractionMode, "ai");
+  assert.equal(openRouterCallCount, 2);
+  assert.deepEqual(
+    openRouterRequests.map((request) => (request as { model: string }).model),
+    ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash"],
+  );
+  assert.deepEqual(timing.attemptedModels, [
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash",
+  ]);
+  assert.equal(timing.successfulModel, "deepseek/deepseek-v4-flash");
+  assert.match(costLedger, /"totalTokens":1200/);
+  assert.match(costLedger, /"estimatedCostUsd":0.00007/);
+});
