@@ -94,15 +94,25 @@ export async function extractProductFeatureProfile(
     ...extractHepsiburadaSpecs(hepsiburadaProduct),
     ...extractTableSpecs(html),
   ]);
-  const aiOutput = input.aiExtractor
-    ? await input.aiExtractor({
+  let aiOutput: AiProductFeatureExtractionOutput | undefined;
+  const aiGaps: NonNullable<AiProductFeatureExtractionOutput["gaps"]> = [];
+  if (input.aiExtractor) {
+    try {
+      aiOutput = await input.aiExtractor({
         url: input.url,
         htmlText: prepareAiPageText(normalizeText(html)),
         fetchedAt: checkedAt,
         locale: input.locale ?? "tr-TR",
         intendedUseSummary: input.intendedUseSummary,
-      })
-    : undefined;
+      });
+    } catch (error) {
+      aiGaps.push({
+        code: "ai_extraction_failed",
+        message: `AI extraction failed; structured product-page data was used instead. ${errorMessage(error)}`,
+        severity: "warning",
+      });
+    }
+  }
   const productCategory =
     aiOutput?.productCategory ??
     inferCategory(hepsiburadaCategoryText(hepsiburadaProduct) || html);
@@ -149,7 +159,7 @@ export async function extractProductFeatureProfile(
         qualityState: specs.length > 0 && url ? "ready" : "reviewRequired",
       },
     ],
-    gaps: aiOutput?.gaps ?? [],
+    gaps: [...aiGaps, ...(aiOutput?.gaps ?? [])],
     readiness: specs.length > 0 && url ? "readyForSpecification" : "reviewRequired",
   };
 
@@ -179,6 +189,10 @@ export async function extractProductFeatureProfile(
     validation: validateProductFeatureProfile(profile),
     extractionMode: aiOutput ? "ai" : "structuredFallback",
   };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function parseUrl(rawUrl: string): URL | undefined {
