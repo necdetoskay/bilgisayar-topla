@@ -6,10 +6,12 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "product-extractor-url": "dist/url-runner-cli.js"
+    "product-extractor-url": "dist/url-runner-cli.js",
+    "product-extractor-model-benchmark": "dist/model-benchmark-cli.js"
   },
   "scripts": {
     "build": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm --filter @bilgisayar-topla/specification run build && tsc -p tsconfig.json",
+    "bench:models": "pnpm run build && node dist/model-benchmark-cli.js",
     "run:url": "pnpm run build && node dist/url-runner-cli.js",
     "smoke:openrouter": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm run build && node dist/openrouter-smoke.js",
     "test": "pnpm run build && node --test dist/**/*.test.js",
