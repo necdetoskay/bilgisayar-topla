@@ -31,7 +31,19 @@ export type UrlRunnerResult = {
   complianceReportPath: string;
   suitabilityReportPath: string;
   costLedgerPath?: string;
+  timingReportPath: string;
   readiness: string;
+};
+
+type TimingReport = {
+  fetchMs: number;
+  htmlReadMs: number;
+  extractionMs: number;
+  specificationMs: number;
+  totalMs: number;
+  aiTimeoutMs?: number;
+  model?: string;
+  extractionMode?: "ai" | "structuredFallback";
 };
 
 type SuitabilityReport = {
@@ -69,10 +81,15 @@ export async function runProductExtractionFromUrl(
   const runDir = resolve(outputRoot, runId);
   const costRecords: ProductExtractionCostRecord[] = [];
   const apiKey = env.OPENROUTER_API_KEY;
+  const model = productExtractorModelFromEnv(env);
+  const aiTimeoutMs = productExtractorTimeoutFromEnv(env);
+  const startedAtMs = nowMs();
 
   await mkdir(runDir, { recursive: true });
 
+  const fetchStartedAtMs = nowMs();
   const pageResponse = await fetchProductPage(fetchImpl, options.url);
+  const fetchFinishedAtMs = nowMs();
   if (!pageResponse.ok) {
     await writeJson(join(runDir, "fetch-error.json"), {
       url: options.url,
@@ -84,7 +101,10 @@ export async function runProductExtractionFromUrl(
     throw new Error(`Product page fetch failed with status ${pageResponse.status}.`);
   }
 
+  const htmlReadStartedAtMs = nowMs();
   const html = await pageResponse.text();
+  const htmlReadFinishedAtMs = nowMs();
+  const extractionStartedAtMs = nowMs();
   const extraction = await extractProductFeatureProfile({
     url: options.url,
     html,
@@ -94,19 +114,34 @@ export async function runProductExtractionFromUrl(
     aiExtractor: apiKey
       ? createOpenRouterProductFeatureExtractor({
           apiKey,
-          model: productExtractorModelFromEnv(env),
+          model,
           fetchImpl,
           costLedger: createInMemoryCostLedger(costRecords),
+          requestTimeoutMs: aiTimeoutMs,
         })
       : undefined,
   });
+  const extractionFinishedAtMs = nowMs();
+  const specificationStartedAtMs = nowMs();
   const specification = generateSpecificationDraft(extraction.profile);
+  const specificationFinishedAtMs = nowMs();
 
   const profilePath = join(runDir, "profile.json");
   const draftPath = join(runDir, "draft-specification.md");
   const complianceReportPath = join(runDir, "compliance-report.json");
   const suitabilityReportPath = join(runDir, "suitability-report.json");
   const costLedgerPath = costRecords.length ? join(runDir, "cost-ledger.jsonl") : undefined;
+  const timingReportPath = join(runDir, "timing-report.json");
+  const timingReport: TimingReport = {
+    fetchMs: elapsedMs(fetchStartedAtMs, fetchFinishedAtMs),
+    htmlReadMs: elapsedMs(htmlReadStartedAtMs, htmlReadFinishedAtMs),
+    extractionMs: elapsedMs(extractionStartedAtMs, extractionFinishedAtMs),
+    specificationMs: elapsedMs(specificationStartedAtMs, specificationFinishedAtMs),
+    totalMs: elapsedMs(startedAtMs, nowMs()),
+    aiTimeoutMs: apiKey ? aiTimeoutMs : undefined,
+    model: apiKey ? model : undefined,
+    extractionMode: extraction.extractionMode,
+  };
 
   await writeJson(profilePath, extraction.profile);
   await writeFile(
@@ -116,6 +151,7 @@ export async function runProductExtractionFromUrl(
   );
   await writeJson(complianceReportPath, specification.complianceReport);
   await writeJson(suitabilityReportPath, createSuitabilityReport(extraction.profile));
+  await writeJson(timingReportPath, timingReport);
 
   if (costLedgerPath) {
     await writeFile(
@@ -135,6 +171,7 @@ export async function runProductExtractionFromUrl(
     complianceReportPath,
     suitabilityReportPath,
     costLedgerPath,
+    timingReportPath,
     readiness: specification.readiness,
   };
 }
@@ -155,6 +192,24 @@ function createInMemoryCostLedger(
       records.push(record);
     },
   };
+}
+
+function productExtractorTimeoutFromEnv(env: NodeJS.ProcessEnv): number {
+  const rawValue = env.PRODUCT_EXTRACTOR_AI_TIMEOUT_MS;
+  if (!rawValue) {
+    return 30_000;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) && value > 0 ? value : 30_000;
+}
+
+function nowMs(): number {
+  return Date.now();
+}
+
+function elapsedMs(startedAtMs: number, finishedAtMs: number): number {
+  return Math.max(0, Math.round(finishedAtMs - startedAtMs));
 }
 
 function createSuitabilityReport(profile: ProductFeatureProfile): SuitabilityReport {
