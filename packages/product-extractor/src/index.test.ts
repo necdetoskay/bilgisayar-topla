@@ -366,3 +366,128 @@ test("ULTEF: tablet case variant selector does not become a specification clause
     "review",
   );
 });
+
+test("ULTEF: Hepsiburada all-in-one product info becomes compact AI evidence", async () => {
+  const hugeFooter = "Kampanya Sepet Stok ".repeat(20_000);
+  const html = `
+    <html>
+      <head><title>Lenovo Ideacentre Intel Core Ultra 5 226V 16GB 512GB SSD Fiyatı</title></head>
+      <body>
+        <script type="mime/invalid" id="reduxStore">
+          {
+            "productState": {
+              "product": {
+                "brand": "Lenovo",
+                "sku": "HBCV0000FC0LUS",
+                "barcode": "0199274928353",
+                "name": "Ideacentre Intel Core Ultra 5 226V 16GB 512GB SSD Freedos 27\\" FHD All In One Bilgisayar F0JW000HTR",
+                "categories": [
+                  { "categoryName": "Bilgisayar Sistemleri ve Ekipmanları" },
+                  { "categoryName": "Bilgisayarlar" },
+                  { "categoryName": "Monitör PC (All-in-One)" }
+                ],
+                "variants": [
+                  {
+                    "sku": "HBCV0000FC0LUS",
+                    "properties": [
+                      {
+                        "name": "Renk",
+                        "displayName": "Renk",
+                        "valueObject": { "actualValue": "Gri" }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        </script>
+        <h2>Ürün Bilgileri</h2>
+        <div><div>Ekran Boyutu</div><div>27 inç</div></div>
+        <div><div>SSD Kapasitesi</div><div>512 GB</div></div>
+        <div><div>Ram (Sistem Belleği)</div><div>16 GB</div></div>
+        <div><div>Çözünürlük (max)</div><div>1920 x 1080</div></div>
+        <footer>${hugeFooter}</footer>
+      </body>
+    </html>
+  `;
+  let aiText = "";
+  const aiExtractor: AiProductFeatureExtractor = async (input) => {
+    aiText = input.htmlText;
+    return {
+      productCategory: "desktopComputer",
+      identity: { title: "Lenovo Ideacentre", brand: "Lenovo" },
+      features: [
+        { label: "Ekran Boyutu", value: 27, unit: "inc" },
+        { label: "SSD Kapasitesi", value: 512, unit: "gb" },
+      ],
+    };
+  };
+
+  const result = await extractProductFeatureProfile({
+    url: "https://www.hepsiburada.com/lenovo-aio-p-HBC0000FC0LTQ",
+    html,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+    aiExtractor,
+  });
+
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.profile.productCategory, "desktopComputer");
+  assert.ok(aiText.length <= 12_000);
+  assert.match(aiText, /Monitör PC \(All-in-One\)/);
+  assert.match(aiText, /SSD Kapasitesi: 512 gb/);
+  assert.doesNotMatch(aiText, /Kampanya Sepet Stok Kampanya Sepet Stok/);
+});
+
+test("ULTEF: Hepsiburada all-in-one fallback extracts visible product info", async () => {
+  const html = `
+    <html>
+      <head><title>Lenovo Ideacentre Intel Core Ultra 5 226V 16GB 512GB SSD Fiyatı</title></head>
+      <body>
+        <script type="mime/invalid" id="reduxStore">
+          {
+            "productState": {
+              "product": {
+                "brand": "Lenovo",
+                "sku": "HBCV0000FC0LUS",
+                "name": "Ideacentre Intel Core Ultra 5 226V 16GB 512GB SSD Freedos 27\\" FHD All In One Bilgisayar F0JW000HTR",
+                "categories": [
+                  { "categoryName": "Bilgisayar Sistemleri ve Ekipmanları" },
+                  { "categoryName": "Bilgisayarlar" },
+                  { "categoryName": "Monitör PC (All-in-One)" }
+                ],
+                "variants": []
+              }
+            }
+          }
+        </script>
+        <h2>Ürün Bilgileri</h2>
+        <div><div>Ekran Boyutu</div><div>27 inç</div></div>
+        <div><div>SSD Kapasitesi</div><div>512 GB</div></div>
+        <div><div>Ram (Sistem Belleği)</div><div>16 GB</div></div>
+      </body>
+    </html>
+  `;
+
+  const result = await extractProductFeatureProfile({
+    url: "https://www.hepsiburada.com/lenovo-aio-p-HBC0000FC0LTQ",
+    html,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+  });
+
+  assert.equal(result.extractionMode, "structuredFallback");
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.profile.productCategory, "desktopComputer");
+  assert.deepEqual(
+    result.profile.features.map((feature) => ({
+      label: feature.label,
+      value: feature.value,
+      unit: feature.unit,
+    })),
+    [
+      { label: "Ekran Boyutu", value: 27, unit: "inc" },
+      { label: "SSD Kapasitesi", value: 512, unit: "gb" },
+      { label: "Ram (Sistem Belleği)", value: 16, unit: "gb" },
+    ],
+  );
+});
