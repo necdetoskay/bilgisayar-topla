@@ -187,6 +187,29 @@ test("ULTEF: extractor falls back to structured page data without AI", async () 
   );
 });
 
+test("ULTEF: extractor keeps structured output when AI extraction times out", async () => {
+  const aiExtractor: AiProductFeatureExtractor = async () => {
+    throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+  };
+
+  const result = await extractProductFeatureProfile({
+    url: "https://example.test/products/monitor-24",
+    html: productHtml,
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+    aiExtractor,
+  });
+
+  assert.equal(result.extractionMode, "structuredFallback");
+  assert.equal(result.validation.valid, true);
+  assert.equal(result.profile.readiness, "readyForSpecification");
+  assert.equal(
+    result.profile.features.some((feature) => feature.label === "Ekran boyutu"),
+    true,
+  );
+  assert.equal(result.profile.gaps[0]?.code, "ai_extraction_failed");
+  assert.match(result.profile.gaps[0]?.message ?? "", /timeout/i);
+});
+
 test("ULTEF: Hepsiburada redux product state extracts real product variants", async () => {
   const html = `
     <html>
