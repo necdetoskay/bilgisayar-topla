@@ -44,11 +44,23 @@ test("ULTEF: URL runner writes profile, suitability report and draft", async () 
   ) as {
     summary: { include: number; review: number; exclude: number };
   };
+  const timing = JSON.parse(await readFile(result.timingReportPath, "utf8")) as {
+    fetchMs: number;
+    htmlReadMs: number;
+    extractionMs: number;
+    specificationMs: number;
+    totalMs: number;
+    extractionMode: string;
+  };
   const draft = await readFile(result.draftPath, "utf8");
 
   assert.equal(result.extractionMode, "structuredFallback");
   assert.equal(result.readiness, "draftReady");
   assert.equal(result.costLedgerPath, undefined);
+  assert.equal(timing.extractionMode, "structuredFallback");
+  assert.equal(typeof timing.fetchMs, "number");
+  assert.equal(typeof timing.extractionMs, "number");
+  assert.equal(typeof timing.totalMs, "number");
   assert.equal(
     profile.features.find((feature) => feature.label === "Marka")?.clauseEligible,
     false,
