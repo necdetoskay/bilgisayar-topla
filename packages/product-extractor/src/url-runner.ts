@@ -32,7 +32,28 @@ export type UrlRunnerResult = {
   suitabilityReportPath: string;
   costLedgerPath?: string;
   timingReportPath: string;
+  aiAttemptReportPath?: string;
   readiness: string;
+};
+
+type AiAttemptReport = {
+  attempts: AiAttemptReportItem[];
+  summary: {
+    attempted: number;
+    succeeded: number;
+    failed: number;
+    billableFailed: number;
+    estimatedCostUsd: number;
+  };
+};
+
+type AiAttemptReportItem = {
+  model: string;
+  status: "succeeded" | "failed";
+  durationMs: number;
+  error?: string;
+  costRecordCount: number;
+  estimatedCostUsd: number;
 };
 
 type TimingReport = {
@@ -86,6 +107,7 @@ export async function runProductExtractionFromUrl(
   const model = productExtractorModelFromEnv(env);
   const modelCandidates = productExtractorModelCandidatesFromEnv(env, model);
   const attemptedModels: string[] = [];
+  const aiAttempts: AiAttemptReportItem[] = [];
   let successfulModel: string | undefined;
   const aiTimeoutMs = productExtractorTimeoutFromEnv(env);
   const startedAtMs = nowMs();
@@ -121,6 +143,8 @@ export async function runProductExtractionFromUrl(
           const errors: string[] = [];
           for (const candidate of modelCandidates) {
             attemptedModels.push(candidate);
+            const attemptStartedAtMs = nowMs();
+            const costRecordStartIndex = costRecords.length;
             try {
               const output = await createOpenRouterProductFeatureExtractor({
                 apiKey,
@@ -130,9 +154,27 @@ export async function runProductExtractionFromUrl(
                 requestTimeoutMs: aiTimeoutMs,
               })(input);
               successfulModel = candidate;
+              aiAttempts.push(
+                createAiAttemptReportItem({
+                  model: candidate,
+                  status: "succeeded",
+                  durationMs: elapsedMs(attemptStartedAtMs, nowMs()),
+                  costRecords: costRecords.slice(costRecordStartIndex),
+                }),
+              );
               return output;
             } catch (error) {
-              errors.push(`${candidate}: ${errorMessage(error)}`);
+              const message = errorMessage(error);
+              aiAttempts.push(
+                createAiAttemptReportItem({
+                  model: candidate,
+                  status: "failed",
+                  durationMs: elapsedMs(attemptStartedAtMs, nowMs()),
+                  error: message,
+                  costRecords: costRecords.slice(costRecordStartIndex),
+                }),
+              );
+              errors.push(`${candidate}: ${message}`);
             }
           }
 
@@ -151,6 +193,7 @@ export async function runProductExtractionFromUrl(
   const suitabilityReportPath = join(runDir, "suitability-report.json");
   const costLedgerPath = costRecords.length ? join(runDir, "cost-ledger.jsonl") : undefined;
   const timingReportPath = join(runDir, "timing-report.json");
+  const aiAttemptReportPath = aiAttempts.length ? join(runDir, "ai-attempts.json") : undefined;
   const timingReport: TimingReport = {
     fetchMs: elapsedMs(fetchStartedAtMs, fetchFinishedAtMs),
     htmlReadMs: elapsedMs(htmlReadStartedAtMs, htmlReadFinishedAtMs),
@@ -173,6 +216,9 @@ export async function runProductExtractionFromUrl(
   await writeJson(complianceReportPath, specification.complianceReport);
   await writeJson(suitabilityReportPath, createSuitabilityReport(extraction.profile));
   await writeJson(timingReportPath, timingReport);
+  if (aiAttemptReportPath) {
+    await writeJson(aiAttemptReportPath, createAiAttemptReport(aiAttempts));
+  }
 
   if (costLedgerPath) {
     await writeFile(
@@ -193,6 +239,7 @@ export async function runProductExtractionFromUrl(
     suitabilityReportPath,
     costLedgerPath,
     timingReportPath,
+    aiAttemptReportPath,
     readiness: specification.readiness,
   };
 }
@@ -215,14 +262,54 @@ function createInMemoryCostLedger(
   };
 }
 
+function createAiAttemptReport(attempts: AiAttemptReportItem[]): AiAttemptReport {
+  const estimatedCostUsd = attempts.reduce(
+    (sum, attempt) => sum + attempt.estimatedCostUsd,
+    0,
+  );
+  const failedAttempts = attempts.filter((attempt) => attempt.status === "failed");
+
+  return {
+    attempts,
+    summary: {
+      attempted: attempts.length,
+      succeeded: attempts.filter((attempt) => attempt.status === "succeeded").length,
+      failed: failedAttempts.length,
+      billableFailed: failedAttempts.filter((attempt) => attempt.costRecordCount > 0)
+        .length,
+      estimatedCostUsd,
+    },
+  };
+}
+
+function createAiAttemptReportItem(input: {
+  model: string;
+  status: AiAttemptReportItem["status"];
+  durationMs: number;
+  error?: string;
+  costRecords: ProductExtractionCostRecord[];
+}): AiAttemptReportItem {
+  return {
+    model: input.model,
+    status: input.status,
+    durationMs: input.durationMs,
+    error: input.error,
+    costRecordCount: input.costRecords.length,
+    estimatedCostUsd: input.costRecords.reduce(
+      (sum, record) => sum + record.estimatedCostUsd,
+      0,
+    ),
+  };
+}
+
 function productExtractorTimeoutFromEnv(env: NodeJS.ProcessEnv): number {
   const rawValue = env.PRODUCT_EXTRACTOR_AI_TIMEOUT_MS;
   if (!rawValue) {
-    return 30_000;
+    return 15_000;
   }
 
   const value = Number(rawValue);
-  return Number.isFinite(value) && value > 0 ? value : 30_000;
+  return Number.isFinite(value) && value > 0 ? value : 15_000;
 }
 
 function productExtractorModelCandidatesFromEnv(
@@ -244,11 +331,11 @@ function productExtractorModelCandidatesFromEnv(
 function productExtractorRetryCountFromEnv(env: NodeJS.ProcessEnv): number {
   const rawValue = env.PRODUCT_EXTRACTOR_MODEL_RETRY_COUNT;
   if (!rawValue) {
-    return 1;
+    return 0;
   }
 
   const value = Number(rawValue);
-  return Number.isInteger(value) && value >= 0 ? value : 1;
+  return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
 function nowMs(): number {
