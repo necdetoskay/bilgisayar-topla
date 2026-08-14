@@ -147,6 +147,7 @@ test("ULTEF: URL runner retries OpenRouter model before structured fallback", as
       OPENROUTER_API_KEY: "test-key",
       PRODUCT_EXTRACTOR_MODEL: "deepseek/deepseek-v4-flash",
       PRODUCT_EXTRACTOR_AI_TIMEOUT_MS: "30000",
+      PRODUCT_EXTRACTOR_MODEL_RETRY_COUNT: "1",
     },
   });
 
@@ -169,4 +170,86 @@ test("ULTEF: URL runner retries OpenRouter model before structured fallback", as
   assert.equal(timing.successfulModel, "deepseek/deepseek-v4-flash");
   assert.match(costLedger, /"totalTokens":1200/);
   assert.match(costLedger, /"estimatedCostUsd":0.00007/);
+});
+
+test("ULTEF: URL runner records billable failed OpenRouter attempts", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "product-url-runner-attempts-"));
+  const fetchImpl: typeof fetch = async (url) => {
+    if (String(url) === "https://openrouter.ai/api/v1/chat/completions") {
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "{not valid json" } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 20,
+            total_tokens: 1020,
+          },
+        }),
+        { status: 200 },
+      );
+    }
+
+    return new Response(
+      `
+        <html>
+          <body>
+            <h1>Example All In One</h1>
+            <table><tr><th>Bellek</th><td>16 GB</td></tr></table>
+          </body>
+        </html>
+      `,
+      { status: 200 },
+    );
+  };
+
+  const result = await runProductExtractionFromUrl({
+    url: "https://example.test/products/aio",
+    outputRoot,
+    runId: "url-runner-attempts-test",
+    fetchedAt: "2026-08-13T00:00:00.000Z",
+    fetchImpl,
+    env: {
+      OPENROUTER_API_KEY: "test-key",
+      PRODUCT_EXTRACTOR_MODEL: "deepseek/deepseek-v4-flash",
+    },
+  });
+
+  const attempts = JSON.parse(
+    await readFile(result.aiAttemptReportPath ?? "", "utf8"),
+  ) as {
+    attempts: Array<{
+      model: string;
+      status: string;
+      error: string;
+      costRecordCount: number;
+      estimatedCostUsd: number;
+    }>;
+    summary: {
+      attempted: number;
+      succeeded: number;
+      failed: number;
+      billableFailed: number;
+      estimatedCostUsd: number;
+    };
+  };
+  const timing = JSON.parse(await readFile(result.timingReportPath, "utf8")) as {
+    aiTimeoutMs: number;
+    attemptedModels: string[];
+    successfulModel?: string;
+  };
+  const costLedger = await readFile(result.costLedgerPath ?? "", "utf8");
+
+  assert.equal(result.extractionMode, "structuredFallback");
+  assert.equal(timing.aiTimeoutMs, 15000);
+  assert.deepEqual(timing.attemptedModels, ["deepseek/deepseek-v4-flash"]);
+  assert.equal(timing.successfulModel, undefined);
+  assert.equal(attempts.summary.attempted, 1);
+  assert.equal(attempts.summary.succeeded, 0);
+  assert.equal(attempts.summary.failed, 1);
+  assert.equal(attempts.summary.billableFailed, 1);
+  assert.equal(attempts.attempts[0]?.status, "failed");
+  assert.match(attempts.attempts[0]?.error ?? "", /JSON/);
+  assert.equal(attempts.attempts[0]?.costRecordCount, 1);
+  assert.equal(attempts.attempts[0]?.estimatedCostUsd, 0.000052);
+  assert.match(costLedger, /"totalTokens":1020/);
 });
