@@ -5,13 +5,15 @@ import {
   productExtractionSystemPrompt,
   type OpenRouterUsage,
 } from "./openrouter-adapter.js";
+import type { ProductExtractionCostRecord } from "./cost-ledger.js";
 
 test("ULTEF: OpenRouter adapter calls configured DeepSeek model and parses JSON", async () => {
-  const calls: Array<{ url: string; body: unknown }> = [];
+  const calls: Array<{ url: string; body: unknown; signal?: AbortSignal | null }> = [];
   const fetchImpl: typeof fetch = async (url, init) => {
     calls.push({
       url: String(url),
       body: JSON.parse(String(init?.body)),
+      signal: init?.signal,
     });
 
     return new Response(
@@ -45,12 +47,19 @@ test("ULTEF: OpenRouter adapter calls configured DeepSeek model and parses JSON"
     );
   };
   const usages: OpenRouterUsage[] = [];
+  const costRecords: ProductExtractionCostRecord[] = [];
 
   const extractor = createOpenRouterProductFeatureExtractor({
     apiKey: "test-key",
     model: "deepseek/deepseek-v4-flash",
     fetchImpl,
+    requestTimeoutMs: 30_000,
     usageSink: (usage) => usages.push(usage),
+    costLedger: {
+      record: (record) => {
+        costRecords.push(record);
+      },
+    },
   });
 
   const result = await extractor({
@@ -63,18 +72,31 @@ test("ULTEF: OpenRouter adapter calls configured DeepSeek model and parses JSON"
   assert.equal(result.productCategory, "monitor");
   assert.equal(result.features.length, 1);
   assert.equal(calls[0]?.url, "https://openrouter.ai/api/v1/chat/completions");
+  assert.ok(calls[0]?.signal);
   assert.equal((calls[0]?.body as { model?: string }).model, "deepseek/deepseek-v4-flash");
   assert.deepEqual(usages[0], {
     promptTokens: 100,
     completionTokens: 40,
     totalTokens: 140,
   });
+  assert.equal(costRecords[0]?.model, "deepseek/deepseek-v4-flash");
+  assert.equal(costRecords[0]?.sourceUrl, "https://example.test/products/monitor");
+  assert.deepEqual(costRecords[0]?.usage, {
+    promptTokens: 100,
+    completionTokens: 40,
+    totalTokens: 140,
+  });
+  assert.equal(costRecords[0]?.estimatedCostUsd, 0.000009);
 });
 
 test("ULTEF: product extraction prompt blocks invented values and brand/model clauses", () => {
   const prompt = productExtractionSystemPrompt();
 
   assert.match(prompt, /Do not invent missing values/);
+  assert.match(prompt, /Do not extract technical feature values from the title alone/);
   assert.match(prompt, /brand, model, SKU/);
-  assert.match(prompt, /Return only JSON/);
+  assert.match(prompt, /marketplace variant selectors such as Seçenek/);
+  assert.match(prompt, /Intel Core Ultra 5 226V -> review/);
+  assert.match(prompt, /Stok adedi, fiyat, sepette indirim, satici -> exclude/);
+  assert.match(prompt, /Return only valid JSON/);
 });

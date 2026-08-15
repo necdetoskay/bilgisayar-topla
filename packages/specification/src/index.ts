@@ -115,11 +115,12 @@ export function generateSpecificationDraft(
 function featureToClause(feature: ProductFeature, index: number): DraftClause {
   const unit = feature.unit ? ` ${feature.unit}` : "";
   const value = `${feature.value}${unit}`;
+  const suggestedClauseText = feature.specSuitability?.suggestedClauseText?.trim();
 
   return {
     clauseId: `clause-${String(index).padStart(3, "0")}`,
     featureKey: feature.key,
-    text: `${feature.label}: en az ${value} olacak sekilde saglanmalidir.`,
+    text: suggestedClauseText || `${feature.label}: en az ${value} olacak sekilde saglanmalidir.`,
     sourceRefIds: feature.sourceRefIds,
   };
 }

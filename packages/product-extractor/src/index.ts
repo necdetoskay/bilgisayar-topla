@@ -5,6 +5,8 @@ import {
   type ProductCategory,
   type ProductFeature,
   type ProductFeatureProfile,
+  type SpecFeatureClass,
+  type SpecSuitabilityDecision,
   type ValidationResult,
   validateProductFeatureProfile,
 } from "@bilgisayar-topla/shared-contracts";
@@ -57,7 +59,28 @@ export type ExtractedSpec = {
   label: string;
   value: string | number | boolean;
   unit?: string;
+  specSuitability?: ExtractedSpecSuitability;
 };
+
+export type ExtractedSpecSuitability = {
+  featureClass: SpecFeatureClass;
+  decision: SpecSuitabilityDecision;
+  reason: string;
+  riskLevel?: LockInRisk;
+  suggestedClauseText?: string;
+  confidence?: number;
+};
+
+type HepsiburadaProductState = {
+  brand?: unknown;
+  sku?: unknown;
+  barcode?: unknown;
+  name?: unknown;
+  categories?: unknown;
+  variants?: unknown;
+};
+
+const MAX_AI_PAGE_TEXT_CHARS = 12_000;
 
 export async function extractProductFeatureProfile(
   input: ProductExtractionInput,
@@ -66,17 +89,38 @@ export async function extractProductFeatureProfile(
   const evidenceId = "product-page-001";
   const url = parseUrl(input.url);
   const html = input.html ?? "";
-  const structuredSpecs = extractTableSpecs(html);
-  const aiOutput = input.aiExtractor
-    ? await input.aiExtractor({
+  const hepsiburadaProduct = extractHepsiburadaProductState(html);
+  const structuredSpecs = dedupeSpecs([
+    ...extractHepsiburadaSpecs(hepsiburadaProduct),
+    ...extractTableSpecs(html),
+    ...extractDefinitionLikeSpecs(html),
+  ]);
+  let aiOutput: AiProductFeatureExtractionOutput | undefined;
+  const aiGaps: NonNullable<AiProductFeatureExtractionOutput["gaps"]> = [];
+  if (input.aiExtractor) {
+    try {
+      aiOutput = await input.aiExtractor({
         url: input.url,
-        htmlText: normalizeText(html),
+        htmlText: prepareAiPageText({
+          html,
+          product: hepsiburadaProduct,
+          structuredSpecs,
+        }),
         fetchedAt: checkedAt,
         locale: input.locale ?? "tr-TR",
         intendedUseSummary: input.intendedUseSummary,
-      })
-    : undefined;
-  const productCategory = aiOutput?.productCategory ?? inferCategory(html);
+      });
+    } catch (error) {
+      aiGaps.push({
+        code: "ai_extraction_failed",
+        message: `AI extraction failed; structured product-page data was used instead. ${errorMessage(error)}`,
+        severity: "warning",
+      });
+    }
+  }
+  const productCategory =
+    aiOutput?.productCategory ??
+    inferCategory(hepsiburadaCategoryText(hepsiburadaProduct) || html);
   const specs = dedupeSpecs(
     aiOutput?.features?.length ? aiOutput.features : structuredSpecs,
   );
@@ -93,9 +137,16 @@ export async function extractProductFeatureProfile(
       ? { summary: input.intendedUseSummary }
       : undefined,
     identity: {
-      title: aiOutput?.identity?.title ?? extractTitle(html),
-      brand: aiOutput?.identity?.brand,
-      model: aiOutput?.identity?.model,
+      title:
+        aiOutput?.identity?.title ??
+        stringValue(hepsiburadaProduct?.name) ??
+        extractTitle(html),
+      brand:
+        aiOutput?.identity?.brand ?? stringValue(hepsiburadaProduct?.brand),
+      model:
+        aiOutput?.identity?.model ??
+        stringValue(hepsiburadaProduct?.sku) ??
+        stringValue(hepsiburadaProduct?.barcode),
       manufacturer: aiOutput?.identity?.manufacturer,
       sourceUrl: url?.href,
     },
@@ -113,7 +164,7 @@ export async function extractProductFeatureProfile(
         qualityState: specs.length > 0 && url ? "ready" : "reviewRequired",
       },
     ],
-    gaps: aiOutput?.gaps ?? [],
+    gaps: [...aiGaps, ...(aiOutput?.gaps ?? [])],
     readiness: specs.length > 0 && url ? "readyForSpecification" : "reviewRequired",
   };
 
@@ -145,12 +196,107 @@ export async function extractProductFeatureProfile(
   };
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function parseUrl(rawUrl: string): URL | undefined {
   try {
     return new URL(rawUrl);
   } catch {
     return undefined;
   }
+}
+
+function extractHepsiburadaProductState(
+  html: string,
+): HepsiburadaProductState | undefined {
+  const stateJson = html.match(
+    /<script[^>]+id=["']reduxStore["'][^>]*>\s*([\s\S]*?)\s*<\/script>/i,
+  )?.[1];
+  if (!stateJson) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(stateJson) as unknown;
+    if (!isRecord(parsed)) {
+      return undefined;
+    }
+    const productState = parsed.productState;
+    if (!isRecord(productState) || !isRecord(productState.product)) {
+      return undefined;
+    }
+    return productState.product as HepsiburadaProductState;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractHepsiburadaSpecs(
+  product: HepsiburadaProductState | undefined,
+): ExtractedSpec[] {
+  if (!product || !Array.isArray(product.variants)) {
+    return [];
+  }
+
+  return product.variants.flatMap((variant) => {
+    if (!isRecord(variant)) {
+      return [];
+    }
+    if (Array.isArray(variant.properties)) {
+      return variant.properties.flatMap(extractHepsiburadaVariantProperty);
+    }
+
+    return extractHepsiburadaVariantProperty(variant);
+  });
+}
+
+function extractHepsiburadaVariantProperty(variant: unknown): ExtractedSpec[] {
+  if (!isRecord(variant)) {
+    return [];
+  }
+
+  const label = stringValue(variant.displayName) ?? stringValue(variant.name);
+  const valueObject = variant.valueObject;
+  const rawValue = isRecord(valueObject)
+    ? stringValue(valueObject.actualValue)
+    : stringValue(variant.value);
+  const normalized = normalizeValue(rawValue);
+  if (!label || !normalized) {
+    return [];
+  }
+
+  return [
+    {
+      label,
+      value: normalized.value,
+      unit: normalized.unit,
+    },
+  ];
+}
+
+function hepsiburadaCategoryText(
+  product: HepsiburadaProductState | undefined,
+): string {
+  if (!product) {
+    return "";
+  }
+
+  const categoryNames = Array.isArray(product.categories)
+    ? product.categories.flatMap((category) => {
+        if (!isRecord(category)) {
+          return [];
+        }
+        return [
+          stringValue(category.categoryName),
+          stringValue(category.breadcrumbTitle),
+          stringValue(category.urlKeyword),
+        ].filter(Boolean);
+      })
+    : [];
+
+  return [stringValue(product.name), ...categoryNames].filter(Boolean).join(" ");
 }
 
 function extractTableSpecs(html: string): ExtractedSpec[] {
@@ -182,12 +328,50 @@ function extractTableSpecs(html: string): ExtractedSpec[] {
   return specs;
 }
 
+function extractDefinitionLikeSpecs(html: string): ExtractedSpec[] {
+  const specs: ExtractedSpec[] = [];
+  const pairPattern =
+    /<div[^>]*>\s*((?:(?!<div\b)[\s\S])*?)\s*<\/div>\s*<div[^>]*>\s*((?:(?!<div\b)[\s\S])*?)\s*<\/div>/gi;
+
+  for (const pairMatch of html.matchAll(pairPattern)) {
+    const label = normalizeText(pairMatch[1] ?? "");
+    const rawValue = normalizeText(pairMatch[2] ?? "");
+    if (!looksLikeSpecLabel(label) || !rawValue || rawValue.length > 120) {
+      continue;
+    }
+
+    const normalized = normalizeValue(rawValue);
+    if (!normalized) {
+      continue;
+    }
+
+    specs.push({
+      label,
+      value: normalized.value,
+      unit: normalized.unit,
+    });
+  }
+
+  return specs;
+}
+
+function looksLikeSpecLabel(label: string): boolean {
+  if (label.length < 2 || label.length > 80) {
+    return false;
+  }
+
+  return /(ekran|çözünürlük|cozunurluk|işlemci|islemci|bellek|ram|ssd|disk|depolama|usb|hdmi|webcam|ağırlık|agirlik|dokunmatik|panel|kart okuyucu|işletim sistemi|isletim sistemi|renk|menşei|mensei)/i.test(
+    label,
+  );
+}
+
 function toProductFeature(
   category: ProductCategory,
   spec: ExtractedSpec,
   evidenceId: string,
 ): ProductFeature {
-  const risk = lockInRisk(spec);
+  const suitability = assessSpecSuitability(spec);
+  const risk = suitability.riskLevel;
 
   return {
     key: `${category}.${slug(spec.label)}`,
@@ -195,17 +379,149 @@ function toProductFeature(
     value: spec.value,
     unit: spec.unit,
     group: category,
-    requirementLevel: risk === "high" ? "informational" : "required",
+    requirementLevel:
+      suitability.decision === "include"
+        ? "required"
+        : suitability.decision === "review"
+          ? "preferred"
+          : "informational",
     sourceRefIds: [evidenceId],
     lockInRisk: risk,
-    clauseEligible: risk !== "high",
+    clauseEligible: suitability.decision === "include" && risk !== "high",
+    specSuitability: suitability,
   };
 }
 
-function lockInRisk(spec: ExtractedSpec): LockInRisk {
+function assessSpecSuitability(
+  spec: ExtractedSpec,
+): NonNullable<ProductFeature["specSuitability"]> {
+  const aiSuitability = normalizeAiSuitability(spec.specSuitability);
+  if (aiSuitability) {
+    return aiSuitability;
+  }
+
   const label = spec.label.toLocaleLowerCase("tr-TR");
-  if (/\b(marka|brand|model|sku|part number|urun kodu|seri)\b/i.test(label)) {
+  const value = String(spec.value).toLocaleLowerCase("tr-TR");
+  const text = `${label} ${value}`;
+
+  if (/(secenek|seçenek|varyant|variant)/i.test(label)) {
+    return {
+      featureClass: "unknown",
+      decision: "review",
+      reason: "Marketplace variant selectors may contain alternative products, colors or brand/model compatibility options and should not automatically become specification clauses.",
+      riskLevel: "high",
+      confidence: 0.9,
+    };
+  }
+
+  if (/\b(intel|amd|nvidia|rtx|ryzen|core ultra|core i[3579])\b/i.test(text)) {
+    return {
+      featureClass: "technicalPreferred",
+      decision: "review",
+      reason: "Exact processor, GPU or vendor technology names can create product lock-in and should be generalized before clause generation.",
+      riskLevel: "high",
+      confidence: 0.9,
+    };
+  }
+
+  if (/\b(marka|brand|model|sku|part number|urun kodu|ürün kodu|seri|satici|satıcı)\b/i.test(text)) {
+    return {
+      featureClass: "identity",
+      decision: "exclude",
+      reason: "Brand, model, SKU, serial or seller identifiers can create product lock-in.",
+      riskLevel: "high",
+      confidence: 0.95,
+    };
+  }
+
+  if (/(fiyat|kampanya|indirim|stok|kargo|teslimat|taksit|kupon|sepet|yurt disi satis|yurt dışı satış)/i.test(text)) {
+    return {
+      featureClass: "commercial",
+      decision: "exclude",
+      reason: "Commercial page data is not a stable technical specification criterion.",
+      riskLevel: "high",
+      confidence: 0.92,
+    };
+  }
+
+  if (/(mensei|menşei|origin|ulke|ülke)/i.test(label)) {
+    return {
+      featureClass: "unknown",
+      decision: "review",
+      reason: "Country-of-origin data is not a technical performance requirement and should only be used when a lawful procurement reason exists.",
+      riskLevel: "medium",
+      confidence: 0.82,
+    };
+  }
+
+  if (/(renk|color|tasarim|tasarım|görünüm|gorunum)/i.test(text)) {
+    return {
+      featureClass: "cosmetic",
+      decision: "review",
+      reason: "Cosmetic properties are usually not technical requirements unless the need explicitly depends on them.",
+      riskLevel: "medium",
+      confidence: 0.8,
+    };
+  }
+
+  if (/(mukemmel|mükemmel|ustun|üstün|profesyonel deneyim|oyuncular icin|oyuncular için)/i.test(text)) {
+    return {
+      featureClass: "marketing",
+      decision: "exclude",
+      reason: "Marketing claims are subjective and not directly measurable during acceptance.",
+      riskLevel: "medium",
+      confidence: 0.85,
+    };
+  }
+
+  if (/(ce\b|eac\b|rohs|iso|tse|garanti|enerji sinifi|enerji sınıfı|sertifika)/i.test(text)) {
+    return {
+      featureClass: "standardOrCompliance",
+      decision: "review",
+      reason: "Standards, warranty and compliance details can be useful but should be checked against category policy and current rules.",
+      riskLevel: "medium",
+      confidence: 0.78,
+    };
+  }
+
+  return {
+    featureClass: "technicalRequired",
+    decision: "include",
+    reason: "The feature appears to be an observable technical property.",
+    riskLevel: "low",
+    confidence: 0.82,
+  };
+}
+
+function normalizeAiSuitability(
+  suitability: ExtractedSpecSuitability | undefined,
+): NonNullable<ProductFeature["specSuitability"]> | undefined {
+  if (!suitability || !suitability.reason) {
+    return undefined;
+  }
+
+  const riskLevel = suitability.riskLevel ?? decisionToRisk(suitability.decision);
+  const decision =
+    riskLevel === "high" && suitability.decision === "include"
+      ? "review"
+      : suitability.decision;
+
+  return {
+    featureClass: suitability.featureClass,
+    decision,
+    reason: suitability.reason,
+    riskLevel,
+    suggestedClauseText: suitability.suggestedClauseText,
+    confidence: suitability.confidence,
+  };
+}
+
+function decisionToRisk(decision: SpecSuitabilityDecision): LockInRisk {
+  if (decision === "exclude") {
     return "high";
+  }
+  if (decision === "review") {
+    return "medium";
   }
   return "low";
 }
@@ -213,8 +529,14 @@ function lockInRisk(spec: ExtractedSpec): LockInRisk {
 function inferCategory(text: string): ProductCategory {
   const normalized = text.toLocaleLowerCase("tr-TR");
 
-  if (/(monitor|ekran)/i.test(normalized)) {
-    return "monitor";
+  if (/(all in one|all-in-one|aio|hepsi bir arada|monitor pc|monitör pc).*(bilgisayar|computer)?|(bilgisayar|computer).*(all in one|all-in-one|aio|hepsi bir arada|monitor pc|monitör pc)/i.test(normalized)) {
+    return "desktopComputer";
+  }
+  if (/(tablet|ipad).*(kilif|kılıf|kapak|stand)|(kilif|kılıf|kapak).*(tablet|ipad)/i.test(normalized)) {
+    return "other";
+  }
+  if (/(notebook|laptop|dizustu|dizüstü).*(sogutucu|soğutucu|stand|aksesuar)|(sogutucu|soğutucu|stand|aksesuar).*(notebook|laptop|dizustu|dizüstü)/i.test(normalized)) {
+    return "other";
   }
   if (/(printer|yazici|yazıcı)/i.test(normalized)) {
     return "printer";
@@ -224,6 +546,9 @@ function inferCategory(text: string): ProductCategory {
   }
   if (/(notebook|laptop|dizustu|dizüstü)/i.test(normalized)) {
     return "notebookComputer";
+  }
+  if (/(monitor|ekran)/i.test(normalized)) {
+    return "monitor";
   }
   if (/(switch|router|modem|access point|network|ag cihazi|ağ cihazı)/i.test(normalized)) {
     return "networkDevice";
@@ -300,6 +625,14 @@ function extractTitle(html: string): string | undefined {
   return title ? normalizeText(title) : undefined;
 }
 
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function normalizeText(html: string): string {
   return html
     .replace(/<[^>]*>/g, " ")
@@ -311,6 +644,98 @@ function normalizeText(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function prepareAiPageText(input: {
+  html: string;
+  product: HepsiburadaProductState | undefined;
+  structuredSpecs: ExtractedSpec[];
+}): string {
+  const text = normalizeText(input.html);
+  const categoryText = hepsiburadaCategoryText(input.product);
+  const evidence = [
+    "Product extraction evidence package.",
+    "Use structured specs and visible product-information snippets as technical evidence.",
+    "Do not promote title-only identity hints into technical specification clauses.",
+    `Product name: ${stringValue(input.product?.name) ?? extractTitle(input.html) ?? "unknown"}`,
+    `Brand: ${stringValue(input.product?.brand) ?? "unknown"}`,
+    `SKU: ${stringValue(input.product?.sku) ?? "unknown"}`,
+    `Barcode: ${stringValue(input.product?.barcode) ?? "unknown"}`,
+    `Category evidence: ${categoryText || "unknown"}`,
+    "Structured specs:",
+    ...input.structuredSpecs
+      .slice(0, 80)
+      .map((spec) => `- ${spec.label}: ${formatSpecValue(spec)}`),
+    "Visible page summary:",
+    trimCommercialTail(text.slice(0, 1_000)),
+    "Visible product-information snippets:",
+    ...extractRelevantTextWindows(text).map((window) => `---\n${window}`),
+  ].join("\n");
+
+  if (evidence.length <= MAX_AI_PAGE_TEXT_CHARS) {
+    return evidence;
+  }
+
+  return evidence.slice(0, MAX_AI_PAGE_TEXT_CHARS);
+}
+
+function formatSpecValue(spec: ExtractedSpec): string {
+  return [String(spec.value), spec.unit].filter(Boolean).join(" ");
+}
+
+function extractRelevantTextWindows(text: string): string[] {
+  const windows: string[] = [];
+  const needles = [
+    "Ürün Bilgileri",
+    "Urun Bilgileri",
+    "Ürün özellikleri",
+    "Urun ozellikleri",
+    "Teknik Özellikler",
+    "Teknik Ozellikler",
+    "Ekran Boyutu",
+    "SSD Kapasitesi",
+    "Ram",
+    "İşlemci Tipi",
+    "Çözünürlük",
+  ];
+
+  for (const needle of needles) {
+    const index = text.indexOf(needle);
+    if (index < 0) {
+      continue;
+    }
+    const window = trimCommercialTail(
+      text.slice(Math.max(0, index - 300), index + 800),
+    );
+    if (!windows.some((seen) => seen.includes(needle))) {
+      windows.push(window);
+    }
+  }
+
+  return windows.slice(0, 4);
+}
+
+function trimCommercialTail(text: string): string {
+  const commercialIndex = findFirstIndex(text, [
+    "Kampanya",
+    "Sepet",
+    "Stok",
+    "Taksit",
+    "Kargo",
+    "Teslimat",
+  ]);
+  if (commercialIndex < 0) {
+    return text;
+  }
+
+  return text.slice(0, commercialIndex).trim();
+}
+
+function findFirstIndex(text: string, needles: string[]): number {
+  const indexes = needles
+    .map((needle) => text.indexOf(needle))
+    .filter((index) => index >= 0);
+  return indexes.length ? Math.min(...indexes) : -1;
 }
 
 function slug(value: string): string {
