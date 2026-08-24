@@ -6,11 +6,8 @@ import {
   type BuildIntent,
 } from "@bilgisayar-topla/requirements";
 
-import {
-  applyBuildIntentGate,
-  createPcBuildRun,
-  stageByName,
-} from "./index.js";
+import { createPcBuildRun } from "./index.js";
+import { applyBuildIntentGate, stageByName } from "./requirement-gate.js";
 
 test("AutoCAD Office bootstrap stops before catalog when official evidence is unresolved", () => {
   const run = createPcBuildRun({
