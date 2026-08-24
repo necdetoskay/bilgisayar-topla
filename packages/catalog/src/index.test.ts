@@ -58,9 +58,11 @@ test("all required configurator categories with prices produce a ready catalog s
     ssdOptions: [product("ssd", "SSD A", 2_500)],
     psuOptions: [product("psu", "PSU A", 2_000)],
     caseOptions: [product("case", "Case A", 1_500)],
+    fullCategoryChainReady: true,
   });
 
   assert.equal(snapshot.qualityState, "ready");
+  assert.equal(snapshot.selectionChainReady, true);
   assert.deepEqual(snapshot.missingRequiredCategories, []);
   assert.equal(snapshot.products.length, 7);
   assert.equal(
@@ -90,6 +92,7 @@ test("available product without normalized price is held for review", () => {
     ssdOptions: [product("ssd", "SSD A", 2_500)],
     psuOptions: [product("psu", "PSU A", 2_000)],
     caseOptions: [product("case", "Case A", 1_500)],
+    fullCategoryChainReady: true,
   });
 
   assert.equal(snapshot.qualityState, "reviewRequired");
@@ -114,6 +117,7 @@ test("failed scraper report cannot produce a ready snapshot", () => {
     ssdOptions: [product("ssd", "SSD A", 2_500)],
     psuOptions: [product("psu", "PSU A", 2_000)],
     caseOptions: [product("case", "Case A", 1_500)],
+    fullCategoryChainReady: true,
   });
 
   assert.equal(snapshot.qualityState, "reviewRequired");
@@ -136,5 +140,56 @@ test("duplicate normalized product identity is invalid", () => {
   assert.equal(
     validation.issues.some((issue) => issue.code === "CATALOG_PRODUCT_ID_DUPLICATE"),
     true,
+  );
+});
+
+test("complete categories with a broken selection chain stay reviewRequired", () => {
+  const snapshot = catalogSnapshotFromScraperReport({
+    ok: true,
+    targetUrl: "https://www.incehesap.com/oyun-bilgisayari-toplama/",
+    startedAt: "2026-08-24T20:50:00.000Z",
+    finishedAt: "2026-08-24T20:50:10.000Z",
+    cpuOptions: [product("cpu", "CPU A", 10_000)],
+    motherboardOptions: [product("motherboard", "Board A", 6_000)],
+    ramOptions: [product("ram", "RAM A", 3_000)],
+    gpuOptions: [product("gpu", "GPU A", 15_000)],
+    ssdOptions: [product("ssd", "SSD A", 2_500)],
+    psuOptions: [product("psu", "PSU A", 2_000)],
+    caseOptions: [product("case", "Case A", 1_500)],
+    fullCategoryChainReady: false,
+  });
+
+  assert.equal(snapshot.qualityState, "reviewRequired");
+  assert.equal(snapshot.selectionChainReady, false);
+  assert.equal(
+    snapshot.diagnostics.some(
+      (diagnostic) => diagnostic.code === "CATALOG_SELECTION_CHAIN_INCOMPLETE",
+    ),
+    true,
+  );
+});
+
+test("catalog product identity is stable across price and action text changes", () => {
+  const first = product("cpu", "Ryzen 7 9700X 14.999,00 TL Sepete Ekle", 14_999);
+  const second = product("cpu", "Ryzen 7 9700X 15.499,00 TL Seç", 15_499);
+
+  const firstSnapshot = catalogSnapshotFromScraperReport({
+    ok: true,
+    targetUrl: "https://www.incehesap.com/oyun-bilgisayari-toplama/",
+    startedAt: "2026-08-24T21:00:00.000Z",
+    finishedAt: "2026-08-24T21:00:10.000Z",
+    cpuOptions: [first],
+  });
+  const secondSnapshot = catalogSnapshotFromScraperReport({
+    ok: true,
+    targetUrl: "https://www.incehesap.com/oyun-bilgisayari-toplama/",
+    startedAt: "2026-08-24T21:10:00.000Z",
+    finishedAt: "2026-08-24T21:10:10.000Z",
+    cpuOptions: [second],
+  });
+
+  assert.equal(
+    firstSnapshot.products[0]?.catalogProductId,
+    secondSnapshot.products[0]?.catalogProductId,
   );
 });
