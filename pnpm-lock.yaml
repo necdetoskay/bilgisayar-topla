@@ -15,8 +15,13 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/catalog: {}
+
   packages/harness:
     dependencies:
+      '@bilgisayar-topla/catalog':
+        specifier: workspace:*
+        version: link:../catalog
       '@bilgisayar-topla/requirements':
         specifier: workspace:*
         version: link:../requirements
@@ -235,7 +240,7 @@ packages:
     hasBin: true
 
   fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
