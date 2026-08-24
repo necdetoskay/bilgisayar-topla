@@ -1,8 +1,5 @@
 import type { CatalogCategory } from "@bilgisayar-topla/catalog";
-import type {
-  ProductFeature,
-  ProductFeatureProfile,
-} from "@bilgisayar-topla/shared-contracts";
+import type { ProductFeature, ProductFeatureProfile } from "@bilgisayar-topla/shared-contracts";
 
 export const COMPATIBILITY_POLICY_VERSION = "1.0.0" as const;
 
@@ -32,16 +29,18 @@ export type CompatibilityEvidenceRef = {
   sourceRefIds: string[];
 };
 
+export type CompatibilityRuleId =
+  | "component-completeness"
+  | "component-profile-readiness"
+  | "cpu-motherboard-socket"
+  | "memory-motherboard-generation"
+  | "motherboard-case-form-factor"
+  | "gpu-case-clearance"
+  | "storage-motherboard-interface"
+  | "gpu-psu-capacity";
+
 export type CompatibilityCheck = {
-  ruleId:
-    | "component-completeness"
-    | "component-profile-readiness"
-    | "cpu-motherboard-socket"
-    | "memory-motherboard-generation"
-    | "motherboard-case-form-factor"
-    | "gpu-case-clearance"
-    | "storage-motherboard-interface"
-    | "gpu-psu-capacity";
+  ruleId: CompatibilityRuleId;
   status: CompatibilityStatus;
   code: string;
   message: string;
@@ -60,429 +59,318 @@ export function evaluateCompatibility(
 ): CompatibilityResult {
   const checks: CompatibilityCheck[] = [];
 
-  const completeness = checkComponentCompleteness(components);
+  const completeness = checkCompleteness(components);
   checks.push(completeness);
-  if (completeness.status === "FAIL") {
-    return finalize(checks);
-  }
+  if (completeness.status === "FAIL") return finalize(checks);
 
-  const readiness = checkProfileReadiness(components);
+  const readiness = checkReadiness(components);
   checks.push(readiness);
-  if (readiness.status !== "PASS") {
-    return finalize(checks);
-  }
+  if (readiness.status !== "PASS") return finalize(checks);
 
-  checks.push(checkCpuMotherboardSocket(components));
-  checks.push(checkMemoryGeneration(components));
-  checks.push(checkMotherboardCaseFormFactor(components));
-  checks.push(checkGpuCaseClearance(components));
-  checks.push(checkStorageInterface(components));
-  checks.push(checkGpuPsuCapacity(components));
+  checks.push(checkSocket(components));
+  checks.push(checkMemory(components));
+  checks.push(checkFormFactor(components));
+  checks.push(checkGpuClearance(components));
+  checks.push(checkStorage(components));
+  checks.push(checkPsu(components));
 
   return finalize(checks);
 }
 
-function checkComponentCompleteness(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
+function checkCompleteness(components: CompatibilityComponent[]): CompatibilityCheck {
   const missing = REQUIRED_COMPONENT_CATEGORIES.filter(
-    (category) => !components.some((component) => component.componentCategory === category),
+    (category) => !components.some((item) => item.componentCategory === category),
   );
-  if (missing.length > 0) {
-    return {
-      ruleId: "component-completeness",
-      status: "FAIL",
-      code: "REQUIRED_COMPONENT_MISSING",
-      message: `Required component categories are missing: ${missing.join(", ")}`,
-      evidenceRefs: [],
-    };
+  if (missing.length) {
+    return check(
+      "component-completeness",
+      "FAIL",
+      "REQUIRED_COMPONENT_MISSING",
+      `Required component categories are missing: ${missing.join(", ")}`,
+      [],
+    );
   }
 
   const duplicate = REQUIRED_COMPONENT_CATEGORIES.find(
-    (category) =>
-      components.filter((component) => component.componentCategory === category).length !== 1,
+    (category) => components.filter((item) => item.componentCategory === category).length !== 1,
   );
   if (duplicate) {
-    return {
-      ruleId: "component-completeness",
-      status: "FAIL",
-      code: "REQUIRED_COMPONENT_COUNT_INVALID",
-      message: `Candidate must contain exactly one ${duplicate} component.`,
-      evidenceRefs: components
-        .filter((component) => component.componentCategory === duplicate)
-        .map(componentRef),
-    };
+    return check(
+      "component-completeness",
+      "FAIL",
+      "REQUIRED_COMPONENT_COUNT_INVALID",
+      `Candidate must contain exactly one ${duplicate} component.`,
+      components.filter((item) => item.componentCategory === duplicate).map(componentRef),
+    );
   }
 
-  return {
-    ruleId: "component-completeness",
-    status: "PASS",
-    code: "COMPONENT_SET_COMPLETE",
-    message: "Candidate contains exactly one component from every required category.",
-    evidenceRefs: components.map(componentRef),
-  };
+  return check(
+    "component-completeness",
+    "PASS",
+    "COMPONENT_SET_COMPLETE",
+    "Candidate contains exactly one component from every required category.",
+    components.map(componentRef),
+  );
 }
 
-function checkProfileReadiness(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const blocked = components.find((component) => component.status === "blocked");
+function checkReadiness(components: CompatibilityComponent[]): CompatibilityCheck {
+  const blocked = components.find((item) => item.status === "blocked");
   if (blocked) {
-    return {
-      ruleId: "component-profile-readiness",
-      status: "FAIL",
-      code: "COMPONENT_PROFILE_BLOCKED",
-      message: `${blocked.componentCategory} product ${blocked.catalogProductId} is blocked and cannot participate in a candidate build.`,
-      evidenceRefs: [componentRef(blocked)],
-    };
+    return check(
+      "component-profile-readiness",
+      "FAIL",
+      "COMPONENT_PROFILE_BLOCKED",
+      `${blocked.componentCategory} product ${blocked.catalogProductId} is blocked.`,
+      [componentRef(blocked)],
+    );
   }
 
   const unresolved = components.find(
-    (component) =>
-      component.status !== "ready" ||
-      component.profile.readiness === "reviewRequired" ||
-      component.profile.readiness === "blocked" ||
-      component.profile.features.length === 0,
+    (item) =>
+      item.status !== "ready" ||
+      item.profile.readiness === "reviewRequired" ||
+      item.profile.readiness === "blocked" ||
+      item.profile.features.length === 0,
   );
   if (unresolved) {
-    return {
-      ruleId: "component-profile-readiness",
-      status: "REVIEW_REQUIRED",
-      code: "COMPONENT_PROFILE_NOT_READY",
-      message: `${unresolved.componentCategory} product ${unresolved.catalogProductId} does not have a compatibility-ready technical profile.`,
-      evidenceRefs: [componentRef(unresolved)],
-    };
+    return check(
+      "component-profile-readiness",
+      "REVIEW_REQUIRED",
+      "COMPONENT_PROFILE_NOT_READY",
+      `${unresolved.componentCategory} product ${unresolved.catalogProductId} is not compatibility-ready.`,
+      [componentRef(unresolved)],
+    );
   }
 
-  return {
-    ruleId: "component-profile-readiness",
-    status: "PASS",
-    code: "COMPONENT_PROFILES_READY",
-    message: "All component profiles are ready for deterministic compatibility checks.",
-    evidenceRefs: components.map(componentRef),
-  };
+  return check(
+    "component-profile-readiness",
+    "PASS",
+    "COMPONENT_PROFILES_READY",
+    "All component profiles are ready for deterministic compatibility checks.",
+    components.map(componentRef),
+  );
 }
 
-function checkCpuMotherboardSocket(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const cpu = requiredComponent(components, "cpu");
-  const motherboard = requiredComponent(components, "motherboard");
+function checkSocket(components: CompatibilityComponent[]): CompatibilityCheck {
+  const cpu = component(components, "cpu");
+  const board = component(components, "motherboard");
   const cpuFeature = findFeature(cpu.profile, ["socket", "soket"]);
-  const boardFeature = findFeature(motherboard.profile, [
-    "socket",
-    "soket",
-    "islemci soketi",
-    "cpu socket",
-  ]);
+  const boardFeature = findFeature(board.profile, ["socket", "soket", "islemci soketi", "cpu socket"]);
   const cpuSocket = cpuFeature ? parseSocket(featureText(cpuFeature)) : undefined;
   const boardSocket = boardFeature ? parseSocket(featureText(boardFeature)) : undefined;
+  const evidence = refs(cpu, cpuFeature, board, boardFeature);
 
   if (!cpuSocket || !boardSocket) {
-    return reviewMissing(
+    return review(
       "cpu-motherboard-socket",
       "CPU_MOTHERBOARD_SOCKET_EVIDENCE_MISSING",
-      "CPU and motherboard socket evidence must both be present before compatibility can be accepted.",
-      refs(cpu, cpuFeature, motherboard, boardFeature),
+      "CPU and motherboard socket evidence must both be present.",
+      evidence,
     );
   }
-
   if (cpuSocket !== boardSocket) {
-    return {
-      ruleId: "cpu-motherboard-socket",
-      status: "FAIL",
-      code: "CPU_MOTHERBOARD_SOCKET_MISMATCH",
-      message: `CPU socket ${cpuSocket} does not match motherboard socket ${boardSocket}.`,
-      evidenceRefs: refs(cpu, cpuFeature, motherboard, boardFeature),
-    };
+    return check(
+      "cpu-motherboard-socket",
+      "FAIL",
+      "CPU_MOTHERBOARD_SOCKET_MISMATCH",
+      `CPU socket ${cpuSocket} does not match motherboard socket ${boardSocket}.`,
+      evidence,
+    );
   }
-
-  return pass(
+  return check(
     "cpu-motherboard-socket",
+    "PASS",
     "CPU_MOTHERBOARD_SOCKET_MATCH",
     `CPU and motherboard use ${cpuSocket}.`,
-    refs(cpu, cpuFeature, motherboard, boardFeature),
+    evidence,
   );
 }
 
-function checkMemoryGeneration(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const memory = requiredComponent(components, "memory");
-  const motherboard = requiredComponent(components, "motherboard");
-  const memoryFeature = findFeature(memory.profile, [
-    "ddr",
-    "memory type",
-    "ram type",
-    "bellek tipi",
-    "bellek turu",
-  ]);
-  const boardFeature = findFeature(motherboard.profile, [
-    "ddr",
-    "memory type",
-    "ram type",
-    "bellek tipi",
-    "bellek turu",
-    "supported memory",
-  ]);
-  const memoryGeneration = memoryFeature
-    ? parseDdr(featureText(memoryFeature))
-    : undefined;
-  const boardGenerations = boardFeature
-    ? parseAllDdr(featureText(boardFeature))
-    : [];
+function checkMemory(components: CompatibilityComponent[]): CompatibilityCheck {
+  const memory = component(components, "memory");
+  const board = component(components, "motherboard");
+  const memoryFeature = findFeature(memory.profile, ["ddr", "memory type", "ram type", "bellek tipi", "bellek turu"]);
+  const boardFeature = findFeature(board.profile, ["ddr", "memory type", "ram type", "bellek tipi", "bellek turu", "supported memory"]);
+  const memoryGeneration = memoryFeature ? parseDdr(featureText(memoryFeature)) : undefined;
+  const boardGenerations = boardFeature ? parseAllDdr(featureText(boardFeature)) : [];
+  const evidence = refs(memory, memoryFeature, board, boardFeature);
 
   if (!memoryGeneration || boardGenerations.length === 0) {
-    return reviewMissing(
+    return review(
       "memory-motherboard-generation",
       "MEMORY_GENERATION_EVIDENCE_MISSING",
-      "RAM generation and motherboard memory-generation support must both be evidenced.",
-      refs(memory, memoryFeature, motherboard, boardFeature),
+      "RAM generation and motherboard memory support must both be evidenced.",
+      evidence,
     );
   }
-
   if (!boardGenerations.includes(memoryGeneration)) {
-    return {
-      ruleId: "memory-motherboard-generation",
-      status: "FAIL",
-      code: "MEMORY_MOTHERBOARD_GENERATION_MISMATCH",
-      message: `Memory is ${memoryGeneration}, while motherboard evidence supports ${boardGenerations.join(", ")}.`,
-      evidenceRefs: refs(memory, memoryFeature, motherboard, boardFeature),
-    };
+    return check(
+      "memory-motherboard-generation",
+      "FAIL",
+      "MEMORY_MOTHERBOARD_GENERATION_MISMATCH",
+      `Memory is ${memoryGeneration}; motherboard evidence supports ${boardGenerations.join(", ")}.`,
+      evidence,
+    );
   }
-
-  return pass(
+  return check(
     "memory-motherboard-generation",
+    "PASS",
     "MEMORY_MOTHERBOARD_GENERATION_MATCH",
-    `Memory generation ${memoryGeneration} is supported by the motherboard.`,
-    refs(memory, memoryFeature, motherboard, boardFeature),
+    `${memoryGeneration} memory is supported by the motherboard.`,
+    evidence,
   );
 }
 
-function checkMotherboardCaseFormFactor(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const motherboard = requiredComponent(components, "motherboard");
-  const caseComponent = requiredComponent(components, "case");
-  const boardFeature = findFeature(motherboard.profile, [
-    "form factor",
-    "formfactor",
-    "anakart form",
-    "boyut standardi",
-  ]);
-  const caseFeature = findFeature(caseComponent.profile, [
-    "motherboard support",
-    "anakart destegi",
-    "anakart uyumlulugu",
-    "form factor",
-    "formfactor",
-  ]);
-  const boardFactor = boardFeature
-    ? parseFormFactors(featureText(boardFeature))[0]
-    : undefined;
-  const supportedFactors = caseFeature
-    ? parseFormFactors(featureText(caseFeature))
-    : [];
+function checkFormFactor(components: CompatibilityComponent[]): CompatibilityCheck {
+  const board = component(components, "motherboard");
+  const caseItem = component(components, "case");
+  const boardFeature = findFeature(board.profile, ["form factor", "formfactor", "anakart form", "boyut standardi"]);
+  const caseFeature = findFeature(caseItem.profile, ["motherboard support", "anakart destegi", "anakart uyumlulugu", "form factor", "formfactor"]);
+  const boardFactor = boardFeature ? parseFormFactors(featureText(boardFeature))[0] : undefined;
+  const caseFactors = caseFeature ? parseFormFactors(featureText(caseFeature)) : [];
+  const evidence = refs(board, boardFeature, caseItem, caseFeature);
 
-  if (!boardFactor || supportedFactors.length === 0) {
-    return reviewMissing(
+  if (!boardFactor || caseFactors.length === 0) {
+    return review(
       "motherboard-case-form-factor",
       "MOTHERBOARD_CASE_FORM_FACTOR_EVIDENCE_MISSING",
-      "Motherboard form factor and case motherboard support must both be evidenced.",
-      refs(motherboard, boardFeature, caseComponent, caseFeature),
+      "Motherboard form factor and case support must both be evidenced.",
+      evidence,
     );
   }
-
-  if (!supportedFactors.includes(boardFactor)) {
-    return {
-      ruleId: "motherboard-case-form-factor",
-      status: "FAIL",
-      code: "MOTHERBOARD_CASE_FORM_FACTOR_MISMATCH",
-      message: `Motherboard form factor ${boardFactor} is not listed as supported by the case.`,
-      evidenceRefs: refs(motherboard, boardFeature, caseComponent, caseFeature),
-    };
+  if (!caseFactors.includes(boardFactor)) {
+    return check(
+      "motherboard-case-form-factor",
+      "FAIL",
+      "MOTHERBOARD_CASE_FORM_FACTOR_MISMATCH",
+      `Case does not list motherboard form factor ${boardFactor} as supported.`,
+      evidence,
+    );
   }
-
-  return pass(
+  return check(
     "motherboard-case-form-factor",
+    "PASS",
     "MOTHERBOARD_CASE_FORM_FACTOR_MATCH",
     `Case supports motherboard form factor ${boardFactor}.`,
-    refs(motherboard, boardFeature, caseComponent, caseFeature),
+    evidence,
   );
 }
 
-function checkGpuCaseClearance(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const gpu = requiredComponent(components, "gpu");
-  const caseComponent = requiredComponent(components, "case");
-  const gpuFeature = findFeature(gpu.profile, [
-    "gpu length",
-    "card length",
-    "ekran karti uzunlugu",
-    "uzunluk",
-  ]);
-  const caseFeature = findFeature(caseComponent.profile, [
-    "max gpu length",
-    "maximum gpu length",
-    "vga length",
-    "ekran karti uzunlugu",
-    "gpu clearance",
-  ]);
+function checkGpuClearance(components: CompatibilityComponent[]): CompatibilityCheck {
+  const gpu = component(components, "gpu");
+  const caseItem = component(components, "case");
+  const gpuFeature = findFeature(gpu.profile, ["gpu length", "card length", "ekran karti uzunlugu", "uzunluk"]);
+  const caseFeature = findFeature(caseItem.profile, ["max gpu length", "maximum gpu length", "vga length", "ekran karti uzunlugu", "gpu clearance"]);
   const gpuLength = gpuFeature ? parseLengthMm(gpuFeature) : undefined;
-  const maxGpuLength = caseFeature ? parseLengthMm(caseFeature) : undefined;
+  const caseClearance = caseFeature ? parseLengthMm(caseFeature) : undefined;
+  const evidence = refs(gpu, gpuFeature, caseItem, caseFeature);
 
-  if (gpuLength === undefined || maxGpuLength === undefined) {
-    return reviewMissing(
+  if (gpuLength === undefined || caseClearance === undefined) {
+    return review(
       "gpu-case-clearance",
       "GPU_CASE_CLEARANCE_EVIDENCE_MISSING",
       "GPU length and case maximum GPU clearance must both be evidenced.",
-      refs(gpu, gpuFeature, caseComponent, caseFeature),
+      evidence,
     );
   }
-
-  if (gpuLength > maxGpuLength) {
-    return {
-      ruleId: "gpu-case-clearance",
-      status: "FAIL",
-      code: "GPU_CASE_CLEARANCE_EXCEEDED",
-      message: `GPU length ${gpuLength} mm exceeds case clearance ${maxGpuLength} mm.`,
-      evidenceRefs: refs(gpu, gpuFeature, caseComponent, caseFeature),
-    };
+  if (gpuLength > caseClearance) {
+    return check(
+      "gpu-case-clearance",
+      "FAIL",
+      "GPU_CASE_CLEARANCE_EXCEEDED",
+      `GPU length ${gpuLength} mm exceeds case clearance ${caseClearance} mm.`,
+      evidence,
+    );
   }
-
-  return pass(
+  return check(
     "gpu-case-clearance",
+    "PASS",
     "GPU_CASE_CLEARANCE_OK",
-    `GPU length ${gpuLength} mm fits within ${maxGpuLength} mm case clearance.`,
-    refs(gpu, gpuFeature, caseComponent, caseFeature),
+    `GPU length ${gpuLength} mm fits within ${caseClearance} mm clearance.`,
+    evidence,
   );
 }
 
-function checkStorageInterface(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const storage = requiredComponent(components, "storage");
-  const motherboard = requiredComponent(components, "motherboard");
-  const storageFeature = findFeature(storage.profile, [
-    "interface",
-    "arayuz",
-    "baglanti",
-    "nvme",
-    "sata",
-    "m.2",
-    "m2",
-  ]);
-  const boardFeature = findFeature(motherboard.profile, [
-    "storage",
-    "depolama",
-    "m.2",
-    "m2",
-    "nvme",
-    "sata",
-    "interface",
-    "arayuz",
-  ]);
-  const storageInterface = storageFeature
-    ? parseStorageInterface(featureText(storageFeature))
-    : undefined;
-  const boardSupport = boardFeature
-    ? parseStorageSupport(featureText(boardFeature))
-    : new Set<string>();
+function checkStorage(components: CompatibilityComponent[]): CompatibilityCheck {
+  const storage = component(components, "storage");
+  const board = component(components, "motherboard");
+  const storageFeature = findFeature(storage.profile, ["interface", "arayuz", "baglanti", "nvme", "sata", "m.2", "m2"]);
+  const boardFeature = findFeature(board.profile, ["storage", "depolama", "m.2", "m2", "nvme", "sata", "interface", "arayuz"]);
+  const storageInterface = storageFeature ? parseStorageInterface(featureText(storageFeature)) : undefined;
+  const boardSupport = boardFeature ? parseStorageSupport(featureText(boardFeature)) : new Set<string>();
+  const evidence = refs(storage, storageFeature, board, boardFeature);
 
   if (!storageInterface || boardSupport.size === 0) {
-    return reviewMissing(
+    return review(
       "storage-motherboard-interface",
       "STORAGE_INTERFACE_EVIDENCE_MISSING",
-      "Storage interface and motherboard storage-interface support must both be evidenced.",
-      refs(storage, storageFeature, motherboard, boardFeature),
+      "Storage interface and motherboard storage support must both be evidenced.",
+      evidence,
     );
   }
-
-  if (!storageInterfaceSupported(storageInterface, boardSupport)) {
-    return {
-      ruleId: "storage-motherboard-interface",
-      status: "FAIL",
-      code: "STORAGE_MOTHERBOARD_INTERFACE_MISMATCH",
-      message: `Storage interface ${storageInterface} is not supported by motherboard evidence (${[...boardSupport].join(", ")}).`,
-      evidenceRefs: refs(storage, storageFeature, motherboard, boardFeature),
-    };
+  if (!boardSupport.has(storageInterface)) {
+    return check(
+      "storage-motherboard-interface",
+      "FAIL",
+      "STORAGE_MOTHERBOARD_INTERFACE_MISMATCH",
+      `Storage interface ${storageInterface} is not supported by motherboard evidence (${[...boardSupport].join(", ")}).`,
+      evidence,
+    );
   }
-
-  return pass(
+  return check(
     "storage-motherboard-interface",
+    "PASS",
     "STORAGE_MOTHERBOARD_INTERFACE_MATCH",
     `Storage interface ${storageInterface} is supported by the motherboard.`,
-    refs(storage, storageFeature, motherboard, boardFeature),
+    evidence,
   );
 }
 
-function checkGpuPsuCapacity(
-  components: CompatibilityComponent[],
-): CompatibilityCheck {
-  const gpu = requiredComponent(components, "gpu");
-  const psu = requiredComponent(components, "psu");
-  const gpuRequirement = findFeature(gpu.profile, [
-    "recommended psu",
-    "recommended power supply",
-    "onerilen psu",
-    "onerilen guc kaynagi",
-    "power supply recommendation",
-  ]);
-  const psuCapacity = findFeature(psu.profile, [
-    "watt",
-    "power",
-    "guc",
-    "capacity",
-    "toplam guc",
-  ]);
-  const requiredWatts = gpuRequirement ? parseWatts(gpuRequirement) : undefined;
-  const availableWatts = psuCapacity ? parseWatts(psuCapacity) : undefined;
+function checkPsu(components: CompatibilityComponent[]): CompatibilityCheck {
+  const gpu = component(components, "gpu");
+  const psu = component(components, "psu");
+  const gpuFeature = findFeature(gpu.profile, ["recommended psu", "recommended power supply", "onerilen psu", "onerilen guc kaynagi", "power supply recommendation"]);
+  const psuFeature = findFeature(psu.profile, ["watt", "power", "guc", "capacity", "toplam guc"]);
+  const requiredWatts = gpuFeature ? parseWatts(gpuFeature) : undefined;
+  const psuWatts = psuFeature ? parseWatts(psuFeature) : undefined;
+  const evidence = refs(gpu, gpuFeature, psu, psuFeature);
 
-  if (requiredWatts === undefined || availableWatts === undefined) {
-    return reviewMissing(
+  if (requiredWatts === undefined || psuWatts === undefined) {
+    return review(
       "gpu-psu-capacity",
       "GPU_PSU_CAPACITY_EVIDENCE_MISSING",
       "GPU recommended PSU capacity and PSU rated wattage must both be evidenced in V1.",
-      refs(gpu, gpuRequirement, psu, psuCapacity),
+      evidence,
     );
   }
-
-  if (availableWatts < requiredWatts) {
-    return {
-      ruleId: "gpu-psu-capacity",
-      status: "FAIL",
-      code: "PSU_CAPACITY_BELOW_GPU_RECOMMENDATION",
-      message: `PSU is ${availableWatts} W, below the GPU recommendation of ${requiredWatts} W.`,
-      evidenceRefs: refs(gpu, gpuRequirement, psu, psuCapacity),
-    };
+  if (psuWatts < requiredWatts) {
+    return check(
+      "gpu-psu-capacity",
+      "FAIL",
+      "PSU_CAPACITY_BELOW_GPU_RECOMMENDATION",
+      `PSU is ${psuWatts} W, below GPU recommendation ${requiredWatts} W.`,
+      evidence,
+    );
   }
-
-  return pass(
+  return check(
     "gpu-psu-capacity",
+    "PASS",
     "PSU_CAPACITY_MEETS_GPU_RECOMMENDATION",
-    `PSU ${availableWatts} W meets the GPU recommendation of ${requiredWatts} W.`,
-    refs(gpu, gpuRequirement, psu, psuCapacity),
+    `PSU ${psuWatts} W meets GPU recommendation ${requiredWatts} W.`,
+    evidence,
   );
 }
 
-function requiredComponent(
+function component(
   components: CompatibilityComponent[],
   category: CatalogCategory,
 ): CompatibilityComponent {
-  const component = components.find(
-    (candidate) => candidate.componentCategory === category,
-  );
-  if (!component) {
-    throw new Error(`compatibility invariant failed: missing ${category}`);
-  }
-  return component;
+  const found = components.find((item) => item.componentCategory === category);
+  if (!found) throw new Error(`compatibility invariant failed: missing ${category}`);
+  return found;
 }
 
-function findFeature(
-  profile: ProductFeatureProfile,
-  aliases: string[],
-): ProductFeature | undefined {
+function findFeature(profile: ProductFeatureProfile, aliases: string[]): ProductFeature | undefined {
   const normalizedAliases = aliases.map(normalize);
   return profile.features.find((feature) => {
     const haystack = normalize(`${feature.key} ${feature.label}`);
@@ -491,15 +379,12 @@ function findFeature(
 }
 
 function featureText(feature: ProductFeature): string {
-  return [feature.label, String(feature.value), feature.unit]
-    .filter(Boolean)
-    .join(" ");
+  return [feature.label, String(feature.value), feature.unit].filter(Boolean).join(" ");
 }
 
 function parseSocket(text: string): string | undefined {
-  const normalized = normalize(text).replace(/\s+/g, "");
-  const match = normalized.match(/(?:^|[^a-z0-9])(am4|am5|tr4|strx4|lga\d{3,4})(?:$|[^a-z0-9])/i);
-  return match?.[1]?.toUpperCase();
+  const match = normalize(text).match(/(?:am4|am5|tr4|strx4|lga\s*\d{3,4})/i)?.[0];
+  return match?.replace(/\s+/g, "").toUpperCase();
 }
 
 function parseDdr(text: string): string | undefined {
@@ -508,28 +393,21 @@ function parseDdr(text: string): string | undefined {
 
 function parseAllDdr(text: string): string[] {
   const matches = normalize(text).match(/ddr\s*[345]/gi) ?? [];
-  return [...new Set(matches.map((match) => match.replace(/\s+/g, "").toUpperCase()))];
+  return [...new Set(matches.map((item) => item.replace(/\s+/g, "").toUpperCase()))];
 }
 
 function parseFormFactors(text: string): string[] {
   const normalized = normalize(text);
-  const factors: string[] = [];
-  if (/(micro\s*-?\s*atx|m\s*-?\s*atx|matx)/i.test(normalized)) {
-    factors.push("MICRO_ATX");
-  }
-  if (/(mini\s*-?\s*itx)/i.test(normalized)) {
-    factors.push("MINI_ITX");
-  }
-  const withoutSpecific = normalized
+  const result: string[] = [];
+  if (/(micro\s*-?\s*atx|m\s*-?\s*atx|matx)/i.test(normalized)) result.push("MICRO_ATX");
+  if (/mini\s*-?\s*itx/i.test(normalized)) result.push("MINI_ITX");
+  if (/(^|[^a-z])eatx([^a-z]|$)|extended\s+atx/i.test(normalized)) result.push("EATX");
+  const stripped = normalized
     .replace(/micro\s*-?\s*atx|m\s*-?\s*atx|matx/gi, " ")
-    .replace(/mini\s*-?\s*itx/gi, " ");
-  if (/(^|[^a-z])atx([^a-z]|$)/i.test(withoutSpecific)) {
-    factors.push("ATX");
-  }
-  if (/(^|[^a-z])eatx([^a-z]|$)|extended\s+atx/i.test(normalized)) {
-    factors.push("EATX");
-  }
-  return [...new Set(factors)];
+    .replace(/mini\s*-?\s*itx/gi, " ")
+    .replace(/eatx|extended\s+atx/gi, " ");
+  if (/(^|[^a-z])atx([^a-z]|$)/i.test(stripped)) result.push("ATX");
+  return [...new Set(result)];
 }
 
 function parseLengthMm(feature: ProductFeature): number | undefined {
@@ -538,13 +416,11 @@ function parseLengthMm(feature: ProductFeature): number | undefined {
     if (unit === "mm") return feature.value;
     if (unit === "cm") return feature.value * 10;
   }
-
   const text = normalize(featureText(feature));
-  const mm = text.match(/(\d+(?:[.,]\d+)?)\s*mm/i);
-  if (mm?.[1]) return Number(mm[1].replace(",", "."));
-  const cm = text.match(/(\d+(?:[.,]\d+)?)\s*cm/i);
-  if (cm?.[1]) return Number(cm[1].replace(",", ".")) * 10;
-  return undefined;
+  const mm = text.match(/(\d+(?:[.,]\d+)?)\s*mm/i)?.[1];
+  if (mm) return Number(mm.replace(",", "."));
+  const cm = text.match(/(\d+(?:[.,]\d+)?)\s*cm/i)?.[1];
+  return cm ? Number(cm.replace(",", ".")) * 10 : undefined;
 }
 
 function parseStorageInterface(text: string): "NVME" | "M2_SATA" | "SATA" | undefined {
@@ -557,31 +433,20 @@ function parseStorageInterface(text: string): "NVME" | "M2_SATA" | "SATA" | unde
 
 function parseStorageSupport(text: string): Set<string> {
   const normalized = normalize(text);
-  const support = new Set<string>();
-  if (/nvme|m\.?2.*pcie|pcie.*m\.?2/i.test(normalized)) support.add("NVME");
-  if (/m\.?2.*sata|sata.*m\.?2/i.test(normalized)) support.add("M2_SATA");
-  if (/sata/i.test(normalized)) support.add("SATA");
-  if (/m\.?2/i.test(normalized)) support.add("M2_SLOT");
-  return support;
-}
-
-function storageInterfaceSupported(
-  storageInterface: "NVME" | "M2_SATA" | "SATA",
-  boardSupport: Set<string>,
-): boolean {
-  if (boardSupport.has(storageInterface)) return true;
-  if (storageInterface === "NVME" && boardSupport.has("M2_SLOT")) {
-    return false;
-  }
-  return false;
+  const result = new Set<string>();
+  if (/nvme|m\.?2.*pcie|pcie.*m\.?2/i.test(normalized)) result.add("NVME");
+  if (/m\.?2.*sata|sata.*m\.?2/i.test(normalized)) result.add("M2_SATA");
+  if (/sata/i.test(normalized)) result.add("SATA");
+  return result;
 }
 
 function parseWatts(feature: ProductFeature): number | undefined {
-  if (typeof feature.value === "number" && normalize(feature.unit ?? "") === "w") {
+  if (typeof feature.value === "number" && /^w(?:att)?$/i.test(normalize(feature.unit ?? ""))) {
     return feature.value;
   }
-  const match = normalize(featureText(feature)).match(/(\d+(?:[.,]\d+)?)\s*w(?:att)?\b/i);
-  return match?.[1] ? Number(match[1].replace(",", ".")) : undefined;
+  const raw = normalize(featureText(feature));
+  const value = raw.match(/(\d+(?:[.,]\d+)?)\s*w(?:att)?(?:\s|$)/i)?.[1];
+  return value ? Number(value.replace(",", ".")) : undefined;
 }
 
 function refs(
@@ -590,64 +455,59 @@ function refs(
   second: CompatibilityComponent,
   secondFeature: ProductFeature | undefined,
 ): CompatibilityEvidenceRef[] {
-  return [
-    featureRef(first, firstFeature),
-    featureRef(second, secondFeature),
-  ];
+  return [featureRef(first, firstFeature), featureRef(second, secondFeature)];
 }
 
 function featureRef(
-  component: CompatibilityComponent,
+  item: CompatibilityComponent,
   feature: ProductFeature | undefined,
 ): CompatibilityEvidenceRef {
   return {
-    catalogProductId: component.catalogProductId,
-    profileId: component.profile.profileId,
+    catalogProductId: item.catalogProductId,
+    profileId: item.profile.profileId,
     featureKey: feature?.key,
     sourceRefIds: [...(feature?.sourceRefIds ?? [])],
   };
 }
 
-function componentRef(
-  component: CompatibilityComponent,
-): CompatibilityEvidenceRef {
+function componentRef(item: CompatibilityComponent): CompatibilityEvidenceRef {
   return {
-    catalogProductId: component.catalogProductId,
-    profileId: component.profile.profileId,
-    sourceRefIds: component.profile.evidence.map((evidence) => evidence.evidenceId),
+    catalogProductId: item.catalogProductId,
+    profileId: item.profile.profileId,
+    sourceRefIds: item.profile.evidence.map((evidence) => evidence.evidenceId),
   };
 }
 
-function pass(
-  ruleId: CompatibilityCheck["ruleId"],
-  code: string,
+function review(
+  ruleId: CompatibilityRuleId,
+  codeValue: string,
   message: string,
   evidenceRefs: CompatibilityEvidenceRef[],
 ): CompatibilityCheck {
-  return { ruleId, status: "PASS", code, message, evidenceRefs };
+  return check(ruleId, "REVIEW_REQUIRED", codeValue, message, evidenceRefs);
 }
 
-function reviewMissing(
-  ruleId: CompatibilityCheck["ruleId"],
-  code: string,
+function check(
+  ruleId: CompatibilityRuleId,
+  status: CompatibilityStatus,
+  codeValue: string,
   message: string,
   evidenceRefs: CompatibilityEvidenceRef[],
 ): CompatibilityCheck {
-  return { ruleId, status: "REVIEW_REQUIRED", code, message, evidenceRefs };
+  return { ruleId, status, code: codeValue, message, evidenceRefs };
 }
 
 function finalize(checks: CompatibilityCheck[]): CompatibilityResult {
-  const firstBlockingCheck = checks.find((check) => check.status !== "PASS");
-  const status: CompatibilityStatus = checks.some((check) => check.status === "FAIL")
+  const status: CompatibilityStatus = checks.some((item) => item.status === "FAIL")
     ? "FAIL"
-    : checks.some((check) => check.status === "REVIEW_REQUIRED")
+    : checks.some((item) => item.status === "REVIEW_REQUIRED")
       ? "REVIEW_REQUIRED"
       : "PASS";
   return {
     policyVersion: COMPATIBILITY_POLICY_VERSION,
     status,
     checks,
-    firstBlockingCheck,
+    firstBlockingCheck: checks.find((item) => item.status !== "PASS"),
   };
 }
 
