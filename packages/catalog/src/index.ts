@@ -27,6 +27,7 @@ export type CatalogQualityState = "ready" | "partial" | "reviewRequired" | "reje
 export type CatalogProductSource = {
   sourceType: "incehesapConfigurator";
   targetUrl: string;
+  productUrl?: string;
   observedAt: string;
   scraperRunId: string;
   rawText?: string;
@@ -70,6 +71,7 @@ export type CatalogSnapshot = {
 export type ScraperProductOptionLike = {
   category: "cpu" | "motherboard" | "ram" | "gpu" | "ssd" | "psu" | "case";
   name: string;
+  productUrl?: string;
   priceText?: string;
   priceValue?: number;
   isAvailable: boolean;
@@ -303,6 +305,7 @@ function normalizeProduct(
     source: {
       sourceType: "incehesapConfigurator",
       targetUrl: report.targetUrl,
+      productUrl: option.productUrl,
       observedAt: report.finishedAt,
       scraperRunId,
       rawText: option.rawText,
