@@ -82,7 +82,7 @@ export async function probeCategoryChain(args: {
     }
 
     args.steps.push({ name: `find_${definition.category}_block`, status: "ok" });
-    const options = await extractProductOptions(block, definition.category);
+    const options = await extractProductOptions(args.page, block, definition.category);
     optionsByCategory[definition.category] = options;
     args.steps.push({
       name: `extract_${definition.category}_options`,
@@ -221,6 +221,7 @@ async function findCategoryBlock(
 }
 
 async function extractProductOptions(
+  page: Page,
   block: Locator,
   category: ProductOption["category"],
   limit = 12
@@ -248,6 +249,7 @@ async function extractProductOptions(
       options.push({
         category,
         name: cleanProductName(rawText, priceText).slice(0, 180),
+        productUrl: await extractIncehesapProductUrl(page, card),
         priceText,
         priceValue: parseTurkishPrice(rawText),
         isAvailable: !normalizeText(rawText).includes("stokta yok"),
@@ -261,6 +263,34 @@ async function extractProductOptions(
   }
 
   return options;
+}
+
+async function extractIncehesapProductUrl(
+  page: Page,
+  card: Locator
+): Promise<string | undefined> {
+  const ownHref = await card.getAttribute("href").catch(() => null);
+  const nestedHref = ownHref
+    ? undefined
+    : await card.locator("a[href]").first().getAttribute("href").catch(() => null);
+  const href = ownHref ?? nestedHref;
+
+  if (!href || href.startsWith("#") || href.toLocaleLowerCase("en-US").startsWith("javascript:")) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(href, page.url());
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      return undefined;
+    }
+    if (url.hostname !== "incehesap.com" && url.hostname !== "www.incehesap.com") {
+      return undefined;
+    }
+    return url.href;
+  } catch {
+    return undefined;
+  }
 }
 
 async function trySelectFirstOption(block: Locator): Promise<string | undefined> {
