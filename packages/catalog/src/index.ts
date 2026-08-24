@@ -331,7 +331,7 @@ function normalizeIdentityText(value: string): string {
   return value
     .toLocaleLowerCase("tr-TR")
     .replace(/(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d{2})?\s*(?:tl|try|₺)/gi, " ")
-    .replace(/\b(?:sepete\s+ekle|seç|sec|ekle)\b/gi, " ")
+    .replace(/(?:^|\s)(?:sepete\s+ekle|seç|sec|ekle)(?=\s|$)/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
