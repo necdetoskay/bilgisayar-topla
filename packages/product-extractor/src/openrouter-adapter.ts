@@ -16,11 +16,25 @@ export type OpenRouterUsage = {
   totalTokens?: number;
 };
 
+export type ProductExtractionAiTrace = {
+  capability: "productExtraction";
+  provider: "openrouter";
+  model: string;
+  sourceUrl: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+  outcome: "success" | "validationFailed" | "providerFailed";
+};
+
 export type OpenRouterExtractorAdapterOptions = {
   apiKey: string;
   model?: string;
   fetchImpl?: typeof fetch;
   usageSink?: (usage: OpenRouterUsage) => void;
+  traceSink?: (trace: ProductExtractionAiTrace) => void | Promise<void>;
   costLedger?: ProductExtractionCostLedger;
   requestTimeoutMs?: number;
 };
@@ -48,62 +62,124 @@ export function createOpenRouterProductFeatureExtractor(
   return async (
     input: AiProductFeatureExtractionInput,
   ): Promise<AiProductFeatureExtractionOutput> => {
-    const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: AbortSignal.timeout(requestTimeoutMs),
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: productExtractionSystemPrompt(),
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              url: input.url,
-              locale: input.locale,
-              fetchedAt: input.fetchedAt,
-              intendedUseSummary: input.intendedUseSummary,
-              pageText: input.htmlText,
-            }),
-          },
-        ],
-      }),
-    });
+    const startedAt = performance.now();
+    let usage: OpenRouterUsage = {};
+    let estimatedCostUsd = 0;
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter request failed with status ${response.status}.`);
-    }
+    try {
+      const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(requestTimeoutMs),
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: productExtractionSystemPrompt(),
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                url: input.url,
+                locale: input.locale,
+                fetchedAt: input.fetchedAt,
+                intendedUseSummary: input.intendedUseSummary,
+                pageText: input.htmlText,
+              }),
+            },
+          ],
+        }),
+      });
 
-    const payload = (await response.json()) as OpenRouterChatResponse;
-    const usage: OpenRouterUsage = {
-      promptTokens: payload.usage?.prompt_tokens,
-      completionTokens: payload.usage?.completion_tokens,
-      totalTokens: payload.usage?.total_tokens,
-    };
-    options.usageSink?.(usage);
-    await options.costLedger?.record(
-      createProductExtractionCostRecord({
+      if (!response.ok) {
+        await emitTrace(options.traceSink, {
+          capability: "productExtraction",
+          provider: "openrouter",
+          model,
+          sourceUrl: input.url,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "providerFailed",
+        });
+        throw new Error(`OpenRouter request failed with status ${response.status}.`);
+      }
+
+      const payload = (await response.json()) as OpenRouterChatResponse;
+      usage = {
+        promptTokens: payload.usage?.prompt_tokens,
+        completionTokens: payload.usage?.completion_tokens,
+        totalTokens: payload.usage?.total_tokens,
+      };
+      options.usageSink?.(usage);
+
+      const costRecord = createProductExtractionCostRecord({
         model,
         sourceUrl: input.url,
         usage,
         pricing: pricingForProductExtractorModel(model),
-      }),
-    );
+      });
+      estimatedCostUsd = costRecord.estimatedCostUsd;
+      await options.costLedger?.record(costRecord);
 
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("OpenRouter response did not include message content.");
+      const content = payload.choices?.[0]?.message?.content;
+      if (!content) {
+        await emitTrace(options.traceSink, traceFromUsage({
+          model,
+          sourceUrl: input.url,
+          usage,
+          estimatedCostUsd,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "validationFailed",
+        }));
+        throw new Error("OpenRouter response did not include message content.");
+      }
+
+      let parsed: AiProductFeatureExtractionOutput;
+      try {
+        parsed = parseAiExtractionOutput(content);
+      } catch (error) {
+        await emitTrace(options.traceSink, traceFromUsage({
+          model,
+          sourceUrl: input.url,
+          usage,
+          estimatedCostUsd,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "validationFailed",
+        }));
+        throw error;
+      }
+
+      await emitTrace(options.traceSink, traceFromUsage({
+        model,
+        sourceUrl: input.url,
+        usage,
+        estimatedCostUsd,
+        latencyMs: elapsedMs(startedAt),
+        outcome: "success",
+      }));
+      return parsed;
+    } catch (error) {
+      if (isProviderTransportError(error)) {
+        await emitTrace(options.traceSink, traceFromUsage({
+          model,
+          sourceUrl: input.url,
+          usage,
+          estimatedCostUsd,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "providerFailed",
+        }));
+      }
+      throw error;
     }
-
-    return parseAiExtractionOutput(content);
   };
 }
 
@@ -180,6 +256,50 @@ export function productExtractionSystemPrompt(): string {
     '  "gaps": [{"code": "string", "message": "string", "severity": "info|warning|error", "featureKey": "string"}]',
     "}",
   ].join("\n");
+}
+
+function traceFromUsage(args: {
+  model: string;
+  sourceUrl: string;
+  usage: OpenRouterUsage;
+  estimatedCostUsd: number;
+  latencyMs: number;
+  outcome: ProductExtractionAiTrace["outcome"];
+}): ProductExtractionAiTrace {
+  const inputTokens = args.usage.promptTokens ?? 0;
+  const outputTokens = args.usage.completionTokens ?? 0;
+  return {
+    capability: "productExtraction",
+    provider: "openrouter",
+    model: args.model,
+    sourceUrl: args.sourceUrl,
+    inputTokens,
+    outputTokens,
+    totalTokens: args.usage.totalTokens ?? inputTokens + outputTokens,
+    estimatedCostUsd: args.estimatedCostUsd,
+    latencyMs: args.latencyMs,
+    outcome: args.outcome,
+  };
+}
+
+async function emitTrace(
+  sink: OpenRouterExtractorAdapterOptions["traceSink"],
+  trace: ProductExtractionAiTrace,
+): Promise<void> {
+  await sink?.(trace);
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, performance.now() - startedAt);
+}
+
+function isProviderTransportError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true;
+  }
+  return !/OpenRouter request failed|message content|JSON|features array/i.test(
+    error.message,
+  );
 }
 
 function parseAiExtractionOutput(content: string): AiProductFeatureExtractionOutput {
