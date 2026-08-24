@@ -1,0 +1,53 @@
+{
+  "caseId": "pc-build-autocad-2022-office-001",
+  "datasetVersion": "1.0.0",
+  "language": "tr-TR",
+  "input": {
+    "rawIntent": "AutoCAD 2022 ve Office icin 50.000 TL civarinda sadece kasa istiyorum.",
+    "budgetAmount": 50000,
+    "currency": "TRY",
+    "scope": "caseOnly"
+  },
+  "expectedIntent": {
+    "softwareCandidates": [
+      {
+        "software": "AutoCAD",
+        "version": "2022",
+        "officialVendor": "Autodesk"
+      },
+      {
+        "software": "Microsoft Office",
+        "version": null,
+        "officialVendor": "Microsoft"
+      }
+    ],
+    "requiresClarification": [
+      "Microsoft Office version/edition when official requirements materially differ"
+    ]
+  },
+  "evidencePolicy": {
+    "autocad": "An Autodesk official source must be resolved before AutoCAD hardware requirements become authoritative.",
+    "office": "A Microsoft official source must be resolved before Office-specific requirements become authoritative.",
+    "noInventedRequirementValues": true,
+    "missingOfficialEvidenceOutcome": "reviewRequired"
+  },
+  "expectedHarness": {
+    "taskClass": "pcBuild",
+    "requiredStagesBeforeCatalog": [
+      "intent",
+      "requirementEvidence",
+      "hardwareTarget"
+    ],
+    "catalogMustNotProceedWhenRequirementEvidenceIsReviewRequired": true
+  },
+  "expectedFinalGates": {
+    "budgetMustBeRespected": true,
+    "scopeMustRemainCaseOnly": true,
+    "compatibilityMustBeDeterministic": true,
+    "selectedBuildMustBeVerified": true,
+    "runMustPreserveFirstFailureAttribution": true,
+    "aiUsageMustBeTraceable": true
+  },
+  "status": "bootstrap",
+  "notes": "This bootstrap golden case intentionally contains no fabricated hardware requirement numbers. Official-source snapshots and approved expected requirement values will be added only after the resolver retrieves and records authoritative Autodesk/Microsoft evidence."
+}
