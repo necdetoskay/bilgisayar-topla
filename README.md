@@ -11,6 +11,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - Harness: Goreve gore minimum capability/tool/context provision eden task-aware PC Build Harness.
 - Gereksinim modeli: Resmi yazilim gereksinimleri ve kanit zinciri.
 - Resmi kaynak resolver'i: Yazilim/surum/edition girdisini allow-list kontrollu resmi kaynaga cozer, HTTPS/redirect host kapilarini uygular ve SHA-256 kimlikli snapshot/provenance uretir.
+- Requirement extraction: Her normalize minimum/onerilen alanini exact snapshot SHA ve snapshot icinde bulunan raw `sourceText` kanitina baglar; kanitsiz AI/parser ciktilari authoritative olamaz.
 - Ortak veri sozlesmesi: Tum urun/cihaz ozellikleri `ProductFeatureProfile` yapisina normalize edilir.
 - Karar motoru: Kural tabanli uyumluluk, hedef profil ve skor motoru.
 - AI rolu: Capability bazli model yonlendirme ile ihtiyac ayrisma, teknik yorumlama, kaynak arastirma ve aciklama destek islemleri yapar. AI kanitsiz kesin gereksinim uretmez ve deterministic uyumluluk kapilarini atlayamaz.
@@ -43,6 +44,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - [Model Evaluation and Cost Ledger Profile](docs/21-model-evaluation-and-cost-ledger.md)
 - [PC Build Harness v1](docs/22-pc-build-harness-v1.md)
 - [Official Source Resolver v1](docs/23-official-source-resolver.md)
+- [Snapshot-Backed Requirement Extraction Pipeline v1](docs/24-requirement-extraction-pipeline.md)
 
 ## Takip Issue'lari
 
@@ -52,13 +54,13 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 
 ## Mevcut Durum
 
-Repo planlama, tasarim ve teknik prototip asamasindan ilk PC-build orchestration asamasina gecmektedir. Ilk scraper prototipi Incehesap konfigurator sayfasinda kategori akisini okuyabilir; product extractor tarafinda model policy, OpenRouter adapteri, benchmark ve cost ledger altyapisi bulunur. Yeni `packages/harness` paketi PC Build Run Contract v1 ve task-aware capability provisioning ile bu parcalari ortak bir akis altinda toplamaya baslar. `packages/requirements` resmi kaynak resolver'i ve snapshot/provenance katmani ile requirement evidence zincirini somutlastirmaya baslamistir.
+Repo planlama, tasarim ve teknik prototip asamasindan ilk PC-build orchestration asamasina gecmektedir. Ilk scraper prototipi Incehesap konfigurator sayfasinda kategori akisini okuyabilir; product extractor tarafinda model policy, OpenRouter adapteri, benchmark ve cost ledger altyapisi bulunur. `packages/harness` PC Build Run Contract v1 ve task-aware capability provisioning ile bu parcalari ortak bir akis altinda toplar. `packages/requirements` artik resmi kaynak resolver'i, snapshot/provenance, snapshot-backed extraction validation ve composed requirement-resolution pipeline'ina sahiptir.
 
 Aktif ilk milestone:
 
 1. Kullanicinin yazilim/is yuku ihtiyacini al.
 2. Resmi kaynaklari deterministik resolver ile cozumle ve snapshot/provenance kaydi olustur.
-3. Resmi snapshot'tan minimum ve onerilen gereksinimleri cikar.
+3. Resmi snapshot'tan minimum ve onerilen gereksinimleri cikar ve raw field evidence ile dogrula.
 4. Kanitli donanim hedef profili olustur.
 5. Incehesap katalog/configurator verisini oku.
 6. Cihaz/urun ozelliklerini `ProductFeatureProfile` yapisina cevir.
