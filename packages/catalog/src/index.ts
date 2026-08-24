@@ -62,6 +62,7 @@ export type CatalogSnapshot = {
   products: CatalogProduct[];
   coveredCategories: CatalogCategory[];
   missingRequiredCategories: CatalogCategory[];
+  selectionChainReady?: boolean;
   diagnostics: CatalogDiagnostic[];
   qualityState: CatalogQualityState;
 };
@@ -87,6 +88,7 @@ export type ScraperReportLike = {
   ssdOptions?: ScraperProductOptionLike[];
   psuOptions?: ScraperProductOptionLike[];
   caseOptions?: ScraperProductOptionLike[];
+  fullCategoryChainReady?: boolean;
   diagnostics?: Array<{ code: string; message: string }>;
 };
 
@@ -140,6 +142,15 @@ export function catalogSnapshotFromScraperReport(
     });
   }
 
+  const selectionChainIncomplete = report.fullCategoryChainReady === false;
+  if (selectionChainIncomplete) {
+    diagnostics.push({
+      code: "CATALOG_SELECTION_CHAIN_INCOMPLETE",
+      message:
+        "scraper category selection chain did not complete; catalog cannot be treated as ready",
+    });
+  }
+
   const availableProductWithoutPrice = products.find(
     (product) => product.availability === "available" && !product.price,
   );
@@ -156,9 +167,11 @@ export function catalogSnapshotFromScraperReport(
     ? "reviewRequired"
     : missingRequiredCategories.length > 0
       ? "partial"
-      : availableProductWithoutPrice
+      : selectionChainIncomplete
         ? "reviewRequired"
-        : "ready";
+        : availableProductWithoutPrice
+          ? "reviewRequired"
+          : "ready";
 
   return {
     snapshotId,
@@ -170,6 +183,7 @@ export function catalogSnapshotFromScraperReport(
     products,
     coveredCategories,
     missingRequiredCategories,
+    selectionChainReady: report.fullCategoryChainReady,
     diagnostics,
     qualityState,
   };
@@ -241,6 +255,13 @@ export function validateCatalogSnapshot(
     });
   }
 
+  if (snapshot.qualityState === "ready" && snapshot.selectionChainReady === false) {
+    issues.push({
+      code: "CATALOG_READY_WITH_INCOMPLETE_SELECTION_CHAIN",
+      message: "ready catalog snapshot cannot have an incomplete selection chain",
+    });
+  }
+
   return { valid: issues.length === 0, issues };
 }
 
@@ -307,7 +328,12 @@ function stableId(prefix: string, value: string): string {
 }
 
 function normalizeIdentityText(value: string): string {
-  return value.toLocaleLowerCase("tr-TR").replace(/\s+/g, " ").trim();
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .replace(/(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d{2})?\s*(?:tl|try|₺)/gi, " ")
+    .replace(/\b(?:sepete\s+ekle|seç|sec|ekle)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function sameCategorySet(
