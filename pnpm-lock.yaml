@@ -15,7 +15,11 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
-  packages/harness: {}
+  packages/harness:
+    dependencies:
+      '@bilgisayar-topla/requirements':
+        specifier: workspace:*
+        version: link:../requirements
 
   packages/product-extractor:
     dependencies:
