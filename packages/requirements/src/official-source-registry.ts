@@ -73,7 +73,10 @@ function normalize(value: string): string {
     .trim();
 }
 
-function editionMatches(queryEdition: string | undefined, entryEdition: string | undefined): boolean {
+function editionMatches(
+  queryEdition: string | undefined,
+  entryEdition: string | undefined,
+): boolean {
   if (!queryEdition) {
     return true;
   }
@@ -81,6 +84,23 @@ function editionMatches(queryEdition: string | undefined, entryEdition: string |
     return false;
   }
   return normalize(queryEdition) === normalize(entryEdition);
+}
+
+function productFamilyVersionMatches(
+  query: OfficialSourceQuery,
+  entry: OfficialSourceRegistryEntry,
+): boolean {
+  if (entry.scope !== "productFamily" || entry.version) {
+    return false;
+  }
+
+  const normalizedSoftware = normalize(query.software);
+  const normalizedVersion = normalize(query.version ?? "");
+
+  return (
+    entry.softwareKey === "microsoft365" &&
+    (normalizedSoftware.includes("365") || normalizedVersion === "365")
+  );
 }
 
 export function findOfficialSourceCandidates(
@@ -106,7 +126,7 @@ export function findOfficialSourceCandidates(
     }
 
     return matchingSoftware
-      .filter((entry) => entry.scope === "productFamily" && !entry.version)
+      .filter((entry) => productFamilyVersionMatches(query, entry))
       .map(cloneEntry);
   }
 
