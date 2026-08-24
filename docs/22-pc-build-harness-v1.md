@@ -1,6 +1,6 @@
 # PC Build Harness v1
 
-Status: initial implementation
+Status: active implementation
 Related epic: #1 — Requirement-first evidence-based PC build flow
 
 ## Purpose
@@ -119,6 +119,41 @@ Every run preserves:
 
 A run cannot be `completed` unless every canonical stage passed, at least one build is selected, and every selected build is verified.
 
+## Requirement Evidence Gate
+
+`packages/requirements` owns the evidence-grounded `BuildIntent` contract and deterministic readiness evaluation.
+
+The harness projects that readiness into the PC-build trajectory:
+
+```text
+BuildIntent invalid
+  -> intent FAILED
+  -> run FAILED
+
+needsClarification
+  -> intent REVIEW_REQUIRED
+  -> catalog remains PENDING
+
+missing/unresolved official requirement evidence
+  -> intent PASSED
+  -> requirementEvidence REVIEW_REQUIRED
+  -> hardwareTarget and catalog remain PENDING
+
+resolved official evidence but unresolved hardware target
+  -> intent PASSED
+  -> requirementEvidence PASSED
+  -> hardwareTarget REVIEW_REQUIRED
+  -> catalog remains PENDING
+
+readyForBuild
+  -> intent PASSED
+  -> requirementEvidence PASSED
+  -> hardwareTarget PASSED
+  -> catalog becomes the next PENDING stage
+```
+
+This gate prevents the system from selecting products first and trying to justify them afterward.
+
 ## Failure Attribution
 
 The initial implementation records the earliest blocking stage and a stable failure code.
@@ -158,6 +193,8 @@ Expected path:
 10. Verify the selected build independently from the explanation step.
 11. Produce explanation plus run trace and AI cost/latency ledger.
 
+The bootstrap golden case intentionally contains no fabricated CPU/RAM/GPU requirement numbers. Those fields become canonical only after authoritative Autodesk/Microsoft evidence is acquired and recorded.
+
 ## Initial Acceptance Gates
 
 - task provisioning does not expose unrelated capabilities
@@ -167,15 +204,31 @@ Expected path:
 - a completed run must contain a verified build
 - failed runs retain first failure attribution
 - model/provider identity remains outside feature-domain hard-coding
+- a `ready` software requirement cannot be authoritative without an official source
+- hardware targets must retain source + requirement lineage
+- unresolved official requirement evidence blocks catalog progression
+
+## Implementation Status
+
+Completed in the current slice:
+
+- `packages/harness` package skeleton
+- task-aware capability/tool/context provisioning
+- PC Build Run Contract v1
+- run completion and failure-attribution invariants
+- `packages/requirements` BuildIntent/evidence/hardware-target contracts
+- deterministic BuildIntent readiness gate
+- AutoCAD 2022 + Office bootstrap golden case
+- harness integration that blocks catalog access until evidence and hardware targets are ready
+- unit/integration tests for the above behavior
 
 ## Next Implementation Slice
 
-After the harness skeleton is green:
-
-1. add explicit stage transition helpers and immutable run events
-2. add `packages/requirements` contracts for software requirements and hardware targets
-3. wire existing product extractor usage/cost ledger into harness `aiUsage`
-4. add deterministic compatibility package contracts
-5. create the AutoCAD 2022 + Office golden fixture and execute the first vertical dry run
+1. implement the official-source resolver and snapshot/provenance storage for Autodesk/Microsoft requirement pages
+2. add explicit immutable stage transition/run event records
+3. wire existing product-extractor usage/cost ledger into harness `aiUsage`
+4. add deterministic compatibility package contracts and first CPU/motherboard, RAM, PSU and GPU/case rules
+5. replace bootstrap-only requirement placeholders with approved evidence-backed AutoCAD 2022 + Office golden expectations
+6. execute the first full vertical dry run through catalog selection
 
 Specification generation remains outside this slice.
