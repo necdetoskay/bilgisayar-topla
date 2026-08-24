@@ -51,6 +51,17 @@ test("generic Office stays reviewRequired because Microsoft 365 edition is ambig
   );
 });
 
+test("explicit Office 2021 does not fall back to Microsoft 365 product-family sources", () => {
+  const resolution = resolveOfficialSource({
+    software: "Office",
+    version: "2021",
+  });
+
+  assert.equal(resolution.status, "notFound");
+  assert.deepEqual(resolution.diagnostics, ["OFFICIAL_SOURCE_NOT_FOUND"]);
+  assert.deepEqual(resolution.candidates, []);
+});
+
 test("known Microsoft 365 business edition resolves deterministically", () => {
   const resolution = resolveOfficialSource({
     software: "Microsoft 365",
