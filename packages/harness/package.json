@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
+    "@bilgisayar-topla/catalog": "workspace:*",
     "@bilgisayar-topla/requirements": "workspace:*"
   },
   "scripts": {
