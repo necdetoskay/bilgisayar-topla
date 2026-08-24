@@ -5,6 +5,7 @@ export type ComponentCategory = "cpu" | "motherboard" | "ram" | "gpu" | "ssd" | 
 export interface ProductOption {
   category: ComponentCategory;
   name: string;
+  productUrl?: string;
   priceText?: string;
   priceValue?: number;
   isAvailable: boolean;
