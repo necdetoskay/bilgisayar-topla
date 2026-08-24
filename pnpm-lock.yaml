@@ -207,7 +207,7 @@ packages:
   '@esbuild/openharmony-arm64@0.28.1':
     resolution: {integrity: sha512-ge+Z7EXFNt2BO1oAMsVpiQ8EwndV9i1xXerAeTIK7AtPs3bKFXQM7nlRxDSIUIMeueR1CNXxqztLzdNeReKBJg==}
     engines: {node: '>=18'}
-    cpu: [openharmony]
+    cpu: [arm64]
     os: [openharmony]
 
   '@esbuild/sunos-x64@0.28.1':
@@ -273,7 +273,7 @@ packages:
     hasBin: true
 
   undici-types@7.18.2:
-    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
 snapshots:
 
