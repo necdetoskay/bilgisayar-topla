@@ -7,10 +7,11 @@
   "types": "dist/public.d.ts",
   "dependencies": {
     "@bilgisayar-topla/catalog": "workspace:*",
+    "@bilgisayar-topla/compatibility": "workspace:*",
     "@bilgisayar-topla/requirements": "workspace:*"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm --filter @bilgisayar-topla/compatibility run build && tsc -p tsconfig.json",
     "test": "pnpm run build && node --test dist/**/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
