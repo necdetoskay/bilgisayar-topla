@@ -1,6 +1,6 @@
 {
   "caseId": "pc-build-autocad-2022-office-001",
-  "datasetVersion": "1.0.0",
+  "datasetVersion": "1.1.0",
   "language": "tr-TR",
   "input": {
     "rawIntent": "AutoCAD 2022 ve Office icin 50.000 TL civarinda sadece kasa istiyorum.",
@@ -25,9 +25,28 @@
       "Microsoft Office version/edition when official requirements materially differ"
     ]
   },
+  "expectedSourceResolution": {
+    "autocad": {
+      "status": "resolved",
+      "sourceId": "autodesk-autocad-2022-system-requirements",
+      "officialHost": "www.autodesk.com",
+      "url": "https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/System-requirements-for-AutoCAD-2022-including-Specialized-Toolsets.html"
+    },
+    "office": {
+      "status": "reviewRequired",
+      "diagnostic": "OFFICIAL_SOURCE_AMBIGUOUS",
+      "candidateSourceIds": [
+        "microsoft-365-business-education-government-system-requirements",
+        "microsoft-365-home-system-requirements"
+      ],
+      "officialHost": "support.microsoft.com"
+    }
+  },
   "evidencePolicy": {
-    "autocad": "An Autodesk official source must be resolved before AutoCAD hardware requirements become authoritative.",
-    "office": "A Microsoft official source must be resolved before Office-specific requirements become authoritative.",
+    "autocad": "An Autodesk official source snapshot must be acquired before AutoCAD hardware requirements become authoritative.",
+    "office": "Office remains unresolved until the user context identifies the relevant Microsoft product/version/edition.",
+    "redirectHostMustRemainAllowListed": true,
+    "snapshotMustHaveSha256": true,
     "noInventedRequirementValues": true,
     "missingOfficialEvidenceOutcome": "reviewRequired"
   },
@@ -48,6 +67,6 @@
     "runMustPreserveFirstFailureAttribution": true,
     "aiUsageMustBeTraceable": true
   },
-  "status": "bootstrap",
-  "notes": "This bootstrap golden case intentionally contains no fabricated hardware requirement numbers. Official-source snapshots and approved expected requirement values will be added only after the resolver retrieves and records authoritative Autodesk/Microsoft evidence."
+  "status": "bootstrap-source-resolution",
+  "notes": "The official source identities are pinned, but no hardware requirement values are fabricated. AutoCAD 2022 may proceed to snapshot acquisition. Generic Office must remain reviewRequired until a Microsoft product/version/edition is selected; only then can its official snapshot and extracted requirements enter the evidence chain."
 }
