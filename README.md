@@ -2,18 +2,19 @@
 
 Incehesap bilgisayar toplama sayfasini kullanarak, kullanicinin butcesi ve kullanim amacina gore en iyi bilgisayar konfigurasyonlarini oneren AI destekli agent projesi.
 
-Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek yazilim/is yuku ihtiyacini anlayacak, resmi yazilim gereksinimlerini kanit olarak kullanacak, buna gore donanim hedef profili cikaracak, Incehesap uzerinden uyumlu sistem toplayacak ve istenirse toplanan bilgisayari kamu alimi icin marka/model isaret etmeyen teknik sartname taslagina donusturecektir.
+Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek yazilim/is yuku ihtiyacini anlayacak, resmi yazilim gereksinimlerini kanit olarak kullanacak, buna gore donanim hedef profili cikaracak, Incehesap uzerinden uyumlu sistem toplayacak ve ileriki asamada istenirse toplanan bilgisayari kamu alimi icin marka/model isaret etmeyen teknik sartname taslagina donusturecektir.
 
 ## Temel Yaklasim
 
 - Veri kaynagi: Incehesap bilgisayar toplama sayfasi.
 - Otomasyon: Playwright tabanli browser agent.
+- Harness: Goreve gore minimum capability/tool/context provision eden task-aware PC Build Harness.
 - Gereksinim modeli: Resmi yazilim gereksinimleri ve kanit zinciri.
 - Ortak veri sozlesmesi: Tum urun/cihaz ozellikleri `ProductFeatureProfile` yapisina normalize edilir.
 - Karar motoru: Kural tabanli uyumluluk, hedef profil ve skor motoru.
-- AI rolu: Capability bazli model yonlendirme ile ihtiyac ayrisma, teknik yorumlama, kaynak arastirma, sartname taslagi ve uygunluk destek islemleri yapar. AI kanitsiz kesin gereksinim veya sartname maddesi uretmez.
+- AI rolu: Capability bazli model yonlendirme ile ihtiyac ayrisma, teknik yorumlama, kaynak arastirma ve aciklama destek islemleri yapar. AI kanitsiz kesin gereksinim uretmez ve deterministic uyumluluk kapilarini atlayamaz.
 - AI maliyet/kalite yonetimi: Kullanilan modeller, token miktarlari, tahmini/gercek maliyetler ve alternatif model degerlendirmeleri kayit altina alinir.
-- Sartname rolu: Sadece hazir `ProductFeatureProfile` girdisini kamu alimi diline cevirir; marka/model/vendor/hiz isaretleyen ifadeleri engeller veya review-required yapar.
+- Sartname rolu: Mevcut kod korunur ancak aktif ilk PC-toplama milestone'undan ayridir; bilgisayar toplama akisi stabil olduktan sonra yeniden devreye alinacaktir.
 
 ## Dokumanlar
 
@@ -39,6 +40,7 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 - [Product Feature Profile Contract](docs/19-product-feature-profile-contract.md)
 - [AI Capability Routing Profile](docs/20-ai-capability-routing.md)
 - [Model Evaluation and Cost Ledger Profile](docs/21-model-evaluation-and-cost-ledger.md)
+- [PC Build Harness v1](docs/22-pc-build-harness-v1.md)
 
 ## Takip Issue'lari
 
@@ -48,17 +50,21 @@ Projenin hedefi yalnizca parca secmek degildir. Sistem once kullanicinin gercek 
 
 ## Mevcut Durum
 
-Repo planlama, tasarim ve ilk teknik prototip asamasindadir. Ilk scraper prototipi, Incehesap konfigurator sayfasinda kategori akisini okuyabilen ve secim zincirini dogrulayabilen kucuk bir teknik kanittir.
+Repo planlama, tasarim ve teknik prototip asamasindan ilk PC-build orchestration asamasina gecmektedir. Ilk scraper prototipi Incehesap konfigurator sayfasinda kategori akisini okuyabilir; product extractor tarafinda model policy, OpenRouter adapteri, benchmark ve cost ledger altyapisi bulunur. Yeni `packages/harness` paketi PC Build Run Contract v1 ve task-aware capability provisioning ile bu parcalari ortak bir akis altinda toplamaya baslar.
 
-Yeni ana uygulama yonu:
+Aktif ilk milestone:
 
 1. Kullanicinin yazilim/is yuku ihtiyacini al.
 2. Resmi kaynaklardan minimum ve onerilen gereksinimleri cikar.
 3. Kanitli donanim hedef profili olustur.
-4. Incehesap uzerinden uyumlu sistemi topla.
+4. Incehesap katalog/configurator verisini oku.
 5. Cihaz/urun ozelliklerini `ProductFeatureProfile` yapisina cevir.
-6. Gerekiyorsa kamu alimi teknik sartname taslagina aktar.
-7. AI kullaniminda token, model ve maliyet kaydini raporla.
+6. Uyumlu aday sistemleri deterministic kurallarla olustur ve ele.
+7. Butce/hedef profil skorlamasi yap.
+8. Secilen sistemi bagimsiz verification kapisindan gecir.
+9. Aciklama, run trace, token, latency ve maliyet raporu uret.
+
+Teknik sartname uretimi bu milestone tamamlanana kadar aktif akisin disindadir.
 
 ## Ilk Scraper Prototipi
 
