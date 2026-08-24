@@ -17,11 +17,23 @@ importers:
 
   packages/catalog: {}
 
+  packages/compatibility:
+    dependencies:
+      '@bilgisayar-topla/catalog':
+        specifier: workspace:*
+        version: link:../catalog
+      '@bilgisayar-topla/shared-contracts':
+        specifier: workspace:*
+        version: link:../shared-contracts
+
   packages/harness:
     dependencies:
       '@bilgisayar-topla/catalog':
         specifier: workspace:*
         version: link:../catalog
+      '@bilgisayar-topla/compatibility':
+        specifier: workspace:*
+        version: link:../compatibility
       '@bilgisayar-topla/requirements':
         specifier: workspace:*
         version: link:../requirements
@@ -187,7 +199,7 @@ packages:
     os: [netbsd]
 
   '@esbuild/netbsd-x64@0.28.1':
-    resolution: {integrity: sha512-aeL6lAnN89Hz43Mlh1G8ARasbuoYvSITDEx0tHh5b7jJnHcssqgjy9Yx430GDpmCa6OyrKoS0aNRjKundRizGg==}
+    resolution: {integrity: sha512-aeL6lAn89Hz43Mlh1G8ARasbuoYvSITDEx0tHh5b7jJnHcssqgjy9Yx430GDpmCa6OyrKoS0aNRjKundRizGg==}
     engines: {node: '>=18'}
     cpu: [x64]
     os: [netbsd]
