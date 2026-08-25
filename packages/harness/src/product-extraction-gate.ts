@@ -29,6 +29,8 @@ export type ProductExtractionGateRecord = {
   };
 };
 
+type GateReadiness = "ready" | "reviewRequired" | "blocked";
+
 export function applyProductExtractionGate(args: {
   run: PcBuildRun;
   records: ProductExtractionGateRecord[];
@@ -70,17 +72,30 @@ export function applyProductExtractionGate(args: {
     return run;
   }
 
-  const readyRecords = args.records.filter(isReadyRecord);
-  extraction.outputRefIds = readyRecords.map((record) => record.profile!.profileId);
+  const classified = args.records.map((record) => ({
+    record,
+    readiness: gateReadiness(record),
+  }));
+  const readyRecords = classified
+    .filter((item) => item.readiness === "ready")
+    .map((item) => item.record)
+    .filter(isReadyRecord);
+
+  extraction.outputRefIds = readyRecords.map((record) => record.profile.profileId);
   extraction.evidenceRefs = productEvidence(readyRecords);
   extraction.diagnostics = unique(
-    args.records.flatMap((record) =>
-      record.status === "ready"
-        ? []
-        : record.diagnostics.map(
-            (diagnostic) => `${diagnostic.code}:${record.catalogProductId}`,
-          ),
-    ),
+    classified.flatMap(({ record, readiness }) => {
+      const existing = record.diagnostics.map(
+        (diagnostic) => `${diagnostic.code}:${record.catalogProductId}`,
+      );
+      if (record.status === "ready" && readiness === "reviewRequired") {
+        return [
+          ...existing,
+          `PRODUCT_EXTRACTION_READY_RECORD_EVIDENCE_INVALID:${record.catalogProductId}`,
+        ];
+      }
+      return record.status === "ready" ? [] : existing;
+    }),
   );
 
   const missingReadyCategories = REQUIRED_BUILD_CATEGORIES.filter(
@@ -100,10 +115,10 @@ export function applyProductExtractionGate(args: {
   extraction.diagnostics = unique(extraction.diagnostics);
 
   const unresolvedCategory = missingReadyCategories.find((category) =>
-    args.records.some(
-      (record) =>
-        record.componentCategory === category &&
-        record.status === "reviewRequired",
+    classified.some(
+      (item) =>
+        item.record.componentCategory === category &&
+        item.readiness === "reviewRequired",
     ),
   );
 
@@ -121,6 +136,12 @@ export function applyProductExtractionGate(args: {
     message: `No compatibility-ready product profile exists for required categories: ${missingReadyCategories.join(", ")}.`,
   };
   return run;
+}
+
+function gateReadiness(record: ProductExtractionGateRecord): GateReadiness {
+  if (record.status === "blocked") return "blocked";
+  if (record.status === "reviewRequired") return "reviewRequired";
+  return isReadyRecord(record) ? "ready" : "reviewRequired";
 }
 
 function isReadyRecord(
