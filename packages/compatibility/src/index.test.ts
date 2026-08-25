@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { CatalogCategory } from "@bilgisayar-topla/catalog";
-import type { ProductFeature, ProductFeatureProfile } from "@bilgisayar-topla/shared-contracts";
+import type {
+  ProductFeature,
+  ProductFeatureProfile,
+} from "@bilgisayar-topla/shared-contracts";
 
 import {
   evaluateCompatibility,
@@ -69,17 +72,27 @@ function compatibleCandidate(): CompatibilityComponent[] {
       feature("board.socket", "CPU Socket", "AM5"),
       feature("board.memory", "Memory Type", "DDR5"),
       feature("board.form-factor", "Form Factor", "ATX"),
-      feature("board.storage", "Storage Support", "2x M.2 PCIe NVMe, 4x SATA"),
+      feature(
+        "board.storage",
+        "Storage Support",
+        "2x M.2 PCIe NVMe, 4x SATA",
+      ),
     ]),
     component("memory", [feature("memory.type", "RAM Type", "DDR5")]),
     component("gpu", [
       feature("gpu.length", "GPU Length", 300, "mm"),
       feature("gpu.psu", "Recommended PSU", 650, "W"),
     ]),
-    component("storage", [feature("storage.interface", "Interface", "NVMe M.2 PCIe")]),
+    component("storage", [
+      feature("storage.interface", "Interface", "NVMe M.2 PCIe"),
+    ]),
     component("psu", [feature("psu.power", "Total Power", 750, "W")]),
     component("case", [
-      feature("case.board", "Motherboard Support", "ATX, Micro-ATX, Mini-ITX"),
+      feature(
+        "case.board",
+        "Motherboard Support",
+        "ATX, Micro-ATX, Mini-ITX",
+      ),
       feature("case.gpu", "Max GPU Length", 340, "mm"),
     ]),
   ];
@@ -94,7 +107,9 @@ function replaceFeature(
 ): void {
   const target = components.find((item) => item.componentCategory === category);
   assert.ok(target);
-  const targetFeature = target.profile.features.find((item) => item.key === featureKey);
+  const targetFeature = target.profile.features.find(
+    (item) => item.key === featureKey,
+  );
   assert.ok(targetFeature);
   targetFeature.value = value;
   if (unit !== undefined) targetFeature.unit = unit;
@@ -131,7 +146,9 @@ test("DDR4 memory on a DDR5-only motherboard fails deterministically", () => {
 
   assert.equal(result.status, "FAIL");
   assert.equal(
-    result.checks.find((item) => item.ruleId === "memory-motherboard-generation")?.code,
+    result.checks.find(
+      (item) => item.ruleId === "memory-motherboard-generation",
+    )?.code,
     "MEMORY_MOTHERBOARD_GENERATION_MISMATCH",
   );
 });
@@ -153,7 +170,9 @@ test("missing GPU clearance evidence returns REVIEW_REQUIRED instead of guessing
   const candidate = compatibleCandidate();
   const gpu = candidate.find((item) => item.componentCategory === "gpu");
   assert.ok(gpu);
-  gpu.profile.features = gpu.profile.features.filter((item) => item.key !== "gpu.length");
+  gpu.profile.features = gpu.profile.features.filter(
+    (item) => item.key !== "gpu.length",
+  );
 
   const result = evaluateCompatibility(candidate);
 
@@ -186,4 +205,45 @@ test("blocked component profile fails before compatibility scoring can occur", (
 
   assert.equal(result.status, "FAIL");
   assert.equal(result.firstBlockingCheck?.code, "COMPONENT_PROFILE_BLOCKED");
+});
+
+test("needsMoreFeatures profile cannot be treated as compatibility ready", () => {
+  const candidate = compatibleCandidate();
+  const storage = candidate.find(
+    (item) => item.componentCategory === "storage",
+  );
+  assert.ok(storage);
+  storage.profile.readiness = "needsMoreFeatures";
+
+  const result = evaluateCompatibility(candidate);
+
+  assert.equal(result.status, "REVIEW_REQUIRED");
+  assert.equal(result.checks.length, 2);
+  assert.equal(result.firstBlockingCheck?.code, "COMPONENT_PROFILE_NOT_READY");
+});
+
+test("M.2 SATA evidence does not imply general SATA port support", () => {
+  const candidate = compatibleCandidate();
+  replaceFeature(
+    candidate,
+    "motherboard",
+    "board.storage",
+    "1x M.2 SATA slot",
+  );
+  replaceFeature(
+    candidate,
+    "storage",
+    "storage.interface",
+    "SATA III 2.5 inch",
+  );
+
+  const result = evaluateCompatibility(candidate);
+
+  assert.equal(result.status, "FAIL");
+  assert.equal(
+    result.checks.find(
+      (item) => item.ruleId === "storage-motherboard-interface",
+    )?.code,
+    "STORAGE_MOTHERBOARD_INTERFACE_MISMATCH",
+  );
 });
