@@ -53,6 +53,42 @@ export function applyVerificationResults(args: {
   verification.diagnostics = [];
   verification.outputRefIds = [];
 
+  const duplicateBuildId = firstDuplicate(
+    args.results.map((result) => result.buildId),
+  );
+  const duplicateVerificationId = firstDuplicate(
+    args.results.map((result) => result.verificationId),
+  );
+  const selectedBuildIds = new Set(
+    run.selectedBuilds.map((build) => build.buildId),
+  );
+  const unknownResult = args.results.find(
+    (result) => !selectedBuildIds.has(result.buildId),
+  );
+
+  if (duplicateBuildId || duplicateVerificationId || unknownResult) {
+    const code = duplicateBuildId
+      ? "VERIFICATION_RESULT_BUILD_ID_DUPLICATE"
+      : duplicateVerificationId
+        ? "VERIFICATION_RESULT_ID_DUPLICATE"
+        : "VERIFICATION_RESULT_UNKNOWN_BUILD";
+    const detail = duplicateBuildId ?? duplicateVerificationId ?? unknownResult?.buildId ?? "unknown";
+    verification.status = "failed";
+    verification.diagnostics = [`${code}:${detail}`];
+    resetAfter(run, "verification");
+    run.status = "failed";
+    run.firstFailure = {
+      stage: "verification",
+      code,
+      message: duplicateBuildId
+        ? `Multiple verification results were supplied for selected build ${duplicateBuildId}.`
+        : duplicateVerificationId
+          ? `Verification id ${duplicateVerificationId} is duplicated across the result set.`
+          : `Verification result references unknown selected build ${detail}.`,
+    };
+    return run;
+  }
+
   const resultByBuild = new Map(
     args.results.map((result) => [result.buildId, result] as const),
   );
@@ -233,6 +269,15 @@ function round8(value: number): number {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function firstDuplicate(values: string[]): string | undefined {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) return value;
+    seen.add(value);
+  }
+  return undefined;
 }
 
 function cloneBuild(build: BuildSelection): BuildSelection {
