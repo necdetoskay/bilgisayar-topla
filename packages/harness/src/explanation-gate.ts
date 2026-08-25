@@ -74,6 +74,26 @@ export function applyExplanationGate(args: {
     return run;
   }
 
+  const selectedBuildIds = new Set(
+    run.selectedBuilds.map((build) => build.buildId),
+  );
+  const unknownBuild = args.explanations.find(
+    (record) => !selectedBuildIds.has(record.buildId),
+  );
+  if (unknownBuild) {
+    explanation.status = "failed";
+    explanation.diagnostics = [
+      `EXPLANATION_UNKNOWN_BUILD:${unknownBuild.buildId}`,
+    ];
+    run.status = "failed";
+    run.firstFailure = {
+      stage: "explanation",
+      code: "EXPLANATION_UNKNOWN_BUILD",
+      message: `Explanation references unknown selected build ${unknownBuild.buildId}.`,
+    };
+    return run;
+  }
+
   const knownEvidence = new Map<string, StageEvidenceRef>();
   for (const sourceStage of run.stages) {
     if (sourceStage.stage === "explanation") continue;
