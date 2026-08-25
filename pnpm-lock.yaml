@@ -15,6 +15,21 @@ importers:
         specifier: ^5.9.0
         version: 5.9.3
 
+  packages/build-engine:
+    dependencies:
+      '@bilgisayar-topla/catalog':
+        specifier: workspace:*
+        version: link:../catalog
+      '@bilgisayar-topla/compatibility':
+        specifier: workspace:*
+        version: link:../compatibility
+      '@bilgisayar-topla/requirements':
+        specifier: workspace:*
+        version: link:../requirements
+      '@bilgisayar-topla/shared-contracts':
+        specifier: workspace:*
+        version: link:../shared-contracts
+
   packages/catalog: {}
 
   packages/compatibility:
@@ -28,6 +43,9 @@ importers:
 
   packages/harness:
     dependencies:
+      '@bilgisayar-topla/build-engine':
+        specifier: workspace:*
+        version: link:../build-engine
       '@bilgisayar-topla/catalog':
         specifier: workspace:*
         version: link:../catalog
