@@ -188,6 +188,12 @@ export type AiUsageRecord = {
 
 export type BuildSelection = {
   buildId: string;
+  /**
+   * Catalog product identity is optional for backward compatibility with
+   * pre-verification run records. The verification gate requires it and
+   * returns reviewRequired when the lineage is absent.
+   */
+  catalogProductIds?: string[];
   productProfileIds: string[];
   totalPrice: number;
   currency: string;
