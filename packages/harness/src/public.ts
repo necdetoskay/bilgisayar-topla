@@ -5,4 +5,5 @@ export * from "./product-extraction-gate.js";
 export * from "./compatibility-gate.js";
 export * from "./build-engine-gate.js";
 export * from "./verification-gate.js";
+export * from "./explanation-gate.js";
 export * from "./ai-usage.js";
