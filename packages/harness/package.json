@@ -6,12 +6,13 @@
   "main": "dist/public.js",
   "types": "dist/public.d.ts",
   "dependencies": {
+    "@bilgisayar-topla/build-engine": "workspace:*",
     "@bilgisayar-topla/catalog": "workspace:*",
     "@bilgisayar-topla/compatibility": "workspace:*",
     "@bilgisayar-topla/requirements": "workspace:*"
   },
   "scripts": {
-    "build": "pnpm --filter @bilgisayar-topla/compatibility run build && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "test": "pnpm run build && node --test dist/**/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
