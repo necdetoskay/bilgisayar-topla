@@ -55,6 +55,9 @@ importers:
       '@bilgisayar-topla/requirements':
         specifier: workspace:*
         version: link:../requirements
+      '@bilgisayar-topla/verification':
+        specifier: workspace:*
+        version: link:../verification
 
   packages/product-extractor:
     dependencies:
@@ -105,6 +108,21 @@ importers:
       '@bilgisayar-topla/specification':
         specifier: workspace:*
         version: link:../specification
+
+  packages/verification:
+    dependencies:
+      '@bilgisayar-topla/build-engine':
+        specifier: workspace:*
+        version: link:../build-engine
+      '@bilgisayar-topla/catalog':
+        specifier: workspace:*
+        version: link:../catalog
+      '@bilgisayar-topla/requirements':
+        specifier: workspace:*
+        version: link:../requirements
+      '@bilgisayar-topla/shared-contracts':
+        specifier: workspace:*
+        version: link:../shared-contracts
 
 packages:
 
