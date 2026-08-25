@@ -151,6 +151,7 @@ export function applyBuildEngineResult(args: {
   scoring.outputRefIds = topCandidates.map((candidate) => candidate.candidateId);
   run.selectedBuilds = topCandidates.map((candidate) => ({
     buildId: candidate.candidateId,
+    catalogProductIds: [...candidate.productIds],
     productProfileIds: [...candidate.productProfileIds],
     totalPrice: candidate.totalPrice,
     currency: candidate.currency,
@@ -329,6 +330,9 @@ function cloneRun(run: PcBuildRun): PcBuildRun {
     aiUsage: run.aiUsage.map((usage) => ({ ...usage })),
     selectedBuilds: run.selectedBuilds.map((build) => ({
       ...build,
+      catalogProductIds: build.catalogProductIds
+        ? [...build.catalogProductIds]
+        : undefined,
       productProfileIds: [...build.productProfileIds],
     })),
     firstFailure: run.firstFailure ? { ...run.firstFailure } : undefined,
