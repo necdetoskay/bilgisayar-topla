@@ -3,14 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/public.js",
+  "types": "dist/public.d.ts",
   "bin": {
     "product-extractor-url": "dist/url-runner-cli.js",
     "product-extractor-model-benchmark": "dist/model-benchmark-cli.js"
   },
   "scripts": {
-    "build": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm --filter @bilgisayar-topla/specification run build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @bilgisayar-topla/catalog run build && pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm --filter @bilgisayar-topla/specification run build && tsc -p tsconfig.json",
     "bench:models": "pnpm run build && node dist/model-benchmark-cli.js",
     "run:url": "pnpm run build && node dist/url-runner-cli.js",
     "smoke:openrouter": "pnpm --filter @bilgisayar-topla/shared-contracts run build && pnpm run build && node dist/openrouter-smoke.js",
@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@bilgisayar-topla/catalog": "workspace:*",
     "@bilgisayar-topla/shared-contracts": "workspace:*",
     "@bilgisayar-topla/specification": "workspace:*"
   }

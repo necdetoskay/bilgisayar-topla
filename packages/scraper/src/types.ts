@@ -5,6 +5,7 @@ export type ComponentCategory = "cpu" | "motherboard" | "ram" | "gpu" | "ssd" | 
 export interface ProductOption {
   category: ComponentCategory;
   name: string;
+  productUrl?: string;
   priceText?: string;
   priceValue?: number;
   isAvailable: boolean;
@@ -42,6 +43,14 @@ export interface ScraperDiagnostic {
   details?: Record<string, string | number | boolean | null>;
 }
 
+export interface CategorySelectionRecord {
+  category: ComponentCategory;
+  optionCount: number;
+  blockDetected: boolean;
+  selectedBy?: string;
+  selectionAttempted: boolean;
+}
+
 export interface ScraperReport {
   ok: boolean;
   targetUrl: string;
@@ -52,6 +61,15 @@ export interface ScraperReport {
   categoryTexts: string[];
   cpuOptions: ProductOption[];
   motherboardOptions: ProductOption[];
+  ramOptions?: ProductOption[];
+  gpuOptions?: ProductOption[];
+  ssdOptions?: ProductOption[];
+  psuOptions?: ProductOption[];
+  caseOptions?: ProductOption[];
+  categorySelections?: CategorySelectionRecord[];
+  coveredCategories?: ComponentCategory[];
+  missingCategories?: ComponentCategory[];
+  fullCategoryChainReady?: boolean;
   totalPriceText?: string;
   totalPriceValue?: number;
   selectedBy?: string;

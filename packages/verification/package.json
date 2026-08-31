@@ -1,0 +1,19 @@
+{
+  "name": "@bilgisayar-topla/verification",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@bilgisayar-topla/build-engine": "workspace:*",
+    "@bilgisayar-topla/catalog": "workspace:*",
+    "@bilgisayar-topla/requirements": "workspace:*",
+    "@bilgisayar-topla/shared-contracts": "workspace:*"
+  },
+  "scripts": {
+    "build": "pnpm --filter @bilgisayar-topla/build-engine run build && pnpm --filter @bilgisayar-topla/catalog run build && pnpm --filter @bilgisayar-topla/requirements run build && pnpm --filter @bilgisayar-topla/shared-contracts run build && tsc -p tsconfig.json",
+    "test": "pnpm run build && node --test dist/**/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

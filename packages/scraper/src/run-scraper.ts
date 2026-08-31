@@ -1,18 +1,13 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, Locator, Page } from "playwright";
+import { chromium, Page } from "playwright";
+import { probeCategoryChain, extractPageTotalPrice } from "./category-probe.js";
 import { loadConfig } from "./config.js";
-import { findFirstPrice, parseTurkishPrice, PRICE_PATTERN } from "./price.js";
 import { summarizeReport } from "./report.js";
 import { createRunContext, writeReport } from "./snapshot.js";
-import { selectorGroups } from "./selectors.js";
-import { compactText, normalizeText } from "./text.js";
-import { ProductOption, ScraperDiagnostic, ScraperReport, ScraperStep } from "./types.js";
+import type { ScraperDiagnostic, ScraperReport, ScraperStep } from "./types.js";
 
-const CPU_KEYWORDS = ["cpu", "islemci", "processor"];
-const MOTHERBOARD_KEYWORDS = ["anakart", "motherboard", "mainboard"];
-
-async function collectVisibleTexts(page: Page, limit = 80): Promise<string[]> {
+async function collectVisibleTexts(page: Page, limit = 120): Promise<string[]> {
   return page.locator("h1,h2,h3,h4,h5,button,[role=button],label,summary").evaluateAll(
     (elements, maxItems) =>
       elements
@@ -21,104 +16,6 @@ async function collectVisibleTexts(page: Page, limit = 80): Promise<string[]> {
         .slice(0, Number(maxItems)),
     limit
   );
-}
-
-async function findBlockByKeywords(page: Page, keywords: string[]): Promise<Locator | undefined> {
-  const candidates = page.locator("section,article,div,li");
-  const count = Math.min(await candidates.count(), 500);
-
-  for (let index = 0; index < count; index += 1) {
-    const candidate = candidates.nth(index);
-    const text = normalizeText((await candidate.textContent({ timeout: 500 }).catch(() => "")) ?? "");
-
-    if (keywords.some((keyword) => text.includes(keyword)) && PRICE_PATTERN.test(text)) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
-async function extractProductOptions(
-  block: Locator,
-  category: ProductOption["category"],
-  limit = 10
-): Promise<ProductOption[]> {
-  const cardSelectors = selectorGroups.productCards.candidates.map((candidate) => candidate.selector);
-  const options: ProductOption[] = [];
-
-  for (const selector of cardSelectors) {
-    const cards = block.locator(selector);
-    const count = Math.min(await cards.count().catch(() => 0), limit);
-
-    for (let index = 0; index < count; index += 1) {
-      const card = cards.nth(index);
-      const rawText = compactText((await card.textContent({ timeout: 500 }).catch(() => "")) ?? "");
-
-      if (!rawText || !PRICE_PATTERN.test(rawText)) {
-        continue;
-      }
-
-      options.push({
-        category,
-        name: rawText.slice(0, 180),
-        priceText: findFirstPrice(rawText),
-        priceValue: parseTurkishPrice(rawText),
-        isAvailable: !normalizeText(rawText).includes("stokta yok"),
-        rawText
-      });
-    }
-
-    if (options.length > 0) {
-      return options.slice(0, limit);
-    }
-  }
-
-  return options;
-}
-
-async function extractPageTotalPrice(page: Page): Promise<{ text?: string; value?: number }> {
-  for (const candidate of selectorGroups.totalPrice.candidates) {
-    const blocks = page.locator(candidate.selector);
-    const count = Math.min(await blocks.count().catch(() => 0), 100);
-
-    for (let index = 0; index < count; index += 1) {
-      const rawText = compactText((await blocks.nth(index).textContent({ timeout: 500 }).catch(() => "")) ?? "");
-      const normalized = normalizeText(rawText);
-
-      if (!normalized.includes("toplam") && !normalized.includes("total")) {
-        continue;
-      }
-
-      const priceText = findFirstPrice(rawText);
-
-      if (priceText) {
-        return {
-          text: priceText,
-          value: parseTurkishPrice(priceText)
-        };
-      }
-    }
-  }
-
-  return {};
-}
-
-async function trySelectFirstOption(cpuBlock: Locator): Promise<string | undefined> {
-  for (const candidate of selectorGroups.selectButton.candidates) {
-    const button = cpuBlock.locator(candidate.selector).first();
-
-    if ((await button.count().catch(() => 0)) === 0) {
-      continue;
-    }
-
-    if (await button.isVisible().catch(() => false)) {
-      await button.click({ timeout: 3_000 });
-      return candidate.name;
-    }
-  }
-
-  return undefined;
 }
 
 async function runProbe(): Promise<ScraperReport> {
@@ -139,105 +36,48 @@ async function runProbe(): Promise<ScraperReport> {
     steps[0] = { name: "open_page", status: "ok" };
 
     const categoryTexts = await collectVisibleTexts(page);
-    const cpuBlock = await findBlockByKeywords(page, CPU_KEYWORDS);
+    const categoryProbe = await probeCategoryChain({ page, steps, diagnostics });
+    const totalPrice = await extractPageTotalPrice(page);
 
-    if (!cpuBlock) {
-      const screenshotPath = await runContext.screenshot(page, "cpu-block-not-found");
-      const report: ScraperReport = {
-        ok: false,
-        targetUrl: config.targetUrl,
-        startedAt: startedAt.toISOString(),
-        finishedAt: new Date().toISOString(),
-        steps: [...steps, { name: "find_cpu_block", status: "failed", note: "CPU block was not found." }],
-        diagnostics: [
-          {
-            code: "CPU_BLOCK_NOT_FOUND",
-            message: "CPU block was not found by keyword and price signals.",
-            details: { visibleTextCount: categoryTexts.length }
-          }
-        ],
-        categoryTexts,
-        cpuOptions: [],
-        motherboardOptions: [],
-        screenshotPath
-      };
-      await writeReport(runContext, report);
-      return report;
-    }
-
-    steps.push({ name: "find_cpu_block", status: "ok" });
-    const cpuOptions = await extractProductOptions(cpuBlock, "cpu");
     steps.push({
-      name: "extract_cpu_options",
-      status: cpuOptions.length > 0 ? "ok" : "failed",
-      note: `${cpuOptions.length} CPU candidates found.`
+      name: "extract_total_price",
+      status: totalPrice.text ? "ok" : "skipped",
+      note: totalPrice.text
+        ? `Detected total price: ${totalPrice.text}`
+        : "Total price was not detected."
     });
 
-    let selectedBy: string | undefined;
-    let motherboardDetected = false;
-    let motherboardOptions: ProductOption[] = [];
-    let totalPriceText: string | undefined;
-    let totalPriceValue: number | undefined;
-
-    if (cpuOptions.length > 0) {
-      selectedBy = await trySelectFirstOption(cpuBlock);
-      await page.waitForTimeout(2_000);
-      const motherboardBlock = await findBlockByKeywords(page, MOTHERBOARD_KEYWORDS);
-      motherboardDetected = Boolean(motherboardBlock);
-      motherboardOptions = motherboardBlock ? await extractProductOptions(motherboardBlock, "motherboard") : [];
-      const totalPrice = await extractPageTotalPrice(page);
-      totalPriceText = totalPrice.text;
-      totalPriceValue = totalPrice.value;
-      steps.push({
-        name: "select_first_cpu",
-        status: selectedBy ? "ok" : "failed",
-        note: selectedBy ? `Clicked by selector candidate: ${selectedBy}` : "No select button candidate worked."
-      });
-
-      if (!selectedBy) {
-        diagnostics.push({
-          code: "CPU_SELECT_BUTTON_NOT_FOUND",
-          message: "CPU options were extracted, but no selectable button candidate worked.",
-          details: { cpuOptionCount: cpuOptions.length }
-        });
-      }
-
-      steps.push({
-        name: "detect_motherboard_after_cpu",
-        status: motherboardDetected ? "ok" : "failed",
-        note: `${motherboardOptions.length} motherboard candidates found.`
-      });
-
-      if (!motherboardDetected) {
-        diagnostics.push({
-          code: "MOTHERBOARD_NOT_DETECTED_AFTER_CPU",
-          message: "A CPU selection was attempted, but motherboard options were not detected.",
-          details: { selectedBy: selectedBy ?? null }
-        });
-      }
-
-      steps.push({
-        name: "extract_total_price_after_cpu",
-        status: totalPriceText ? "ok" : "skipped",
-        note: totalPriceText ? `Detected total price: ${totalPriceText}` : "Total price was not detected after CPU selection."
-      });
-    }
-
+    const cpuSelection = categoryProbe.categorySelections.find(
+      (record) => record.category === "cpu"
+    );
     const screenshotPath = await runContext.screenshot(page, "probe-result");
+    const options = categoryProbe.optionsByCategory;
+
     const report: ScraperReport = {
-      ok: cpuOptions.length > 0,
+      // Keep the original Sprint 1 probe-health meaning for backward compatibility.
+      // Full catalog readiness is represented separately by fullCategoryChainReady.
+      ok: options.cpu.length > 0,
       targetUrl: config.targetUrl,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       steps,
       diagnostics,
       categoryTexts,
-      cpuOptions,
-      motherboardOptions,
-      totalPriceText,
-      totalPriceValue,
-      selectedBy,
-      motherboardDetected,
+      cpuOptions: options.cpu,
+      motherboardOptions: options.motherboard,
+      ramOptions: options.ram,
+      gpuOptions: options.gpu,
+      ssdOptions: options.ssd,
+      psuOptions: options.psu,
+      caseOptions: options.case,
+      categorySelections: categoryProbe.categorySelections,
+      coveredCategories: categoryProbe.coveredCategories,
+      missingCategories: categoryProbe.missingCategories,
+      fullCategoryChainReady: categoryProbe.fullCategoryChainReady,
+      totalPriceText: totalPrice.text,
+      totalPriceValue: totalPrice.value,
+      selectedBy: cpuSelection?.selectedBy,
+      motherboardDetected: options.motherboard.length > 0,
       screenshotPath
     };
 

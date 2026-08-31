@@ -1,0 +1,47 @@
+{
+  "caseId": "requirements-autocad-2022-m365-business-001",
+  "datasetVersion": "1.0.0",
+  "checkedAt": "2026-08-24T19:00:00.000Z",
+  "purpose": "Golden expected values for validating extraction from acquired official-source snapshots. These values are test expectations, not runtime hard-coded requirements.",
+  "requirements": [
+    {
+      "software": "AutoCAD",
+      "version": "2022",
+      "vendor": "Autodesk",
+      "sourceId": "autodesk-autocad-2022-system-requirements",
+      "sourceUrl": "https://www.autodesk.com/support/technical/article/caas/sfdcarticles/sfdcarticles/System-requirements-for-AutoCAD-2022-including-Specialized-Toolsets.html",
+      "platform": "Windows",
+      "minimum": {
+        "cpu": "2.5–2.9 GHz processor",
+        "ram": "8 GB",
+        "gpu": "1 GB GPU with 29 GB/s bandwidth and DirectX 11 compliant",
+        "storage": "10.0 GB",
+        "os": "64-bit Microsoft Windows 11 or Windows 10"
+      },
+      "recommended": {
+        "cpu": "3+ GHz processor",
+        "ram": "16 GB",
+        "gpu": "4 GB GPU with 106 GB/s bandwidth and DirectX 12 compliant"
+      }
+    },
+    {
+      "software": "Microsoft 365",
+      "edition": "businessEducationGovernment",
+      "vendor": "Microsoft",
+      "sourceId": "microsoft-365-business-education-government-system-requirements",
+      "sourceUrl": "https://support.microsoft.com/en-us/office/system-requirements/system-requirements-for-microsoft-365-for-business-education-and-government-use",
+      "platform": "Windows",
+      "minimum": {
+        "cpu": "1.6 GHz or faster, 2-core",
+        "ram": "4 GB RAM; 2 GB RAM for 32-bit",
+        "storage": "4 GB available disk space",
+        "os": "Windows 11, Windows Server 2025, or Windows Server 2022",
+        "display": "1280 x 768 screen resolution"
+      },
+      "recommended": {},
+      "notes": [
+        "Microsoft lists workload-specific recommendations such as 2.0 GHz and 4 GB RAM or higher for better video-call experience; these are not treated as universal Microsoft 365 recommended requirements."
+      ]
+    }
+  ]
+}

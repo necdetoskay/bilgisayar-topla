@@ -16,11 +16,25 @@ export type OpenRouterUsage = {
   totalTokens?: number;
 };
 
+export type ProductExtractionAiTrace = {
+  capability: "productExtraction";
+  provider: "openrouter";
+  model: string;
+  sourceUrl: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  latencyMs: number;
+  outcome: "success" | "validationFailed" | "providerFailed";
+};
+
 export type OpenRouterExtractorAdapterOptions = {
   apiKey: string;
   model?: string;
   fetchImpl?: typeof fetch;
   usageSink?: (usage: OpenRouterUsage) => void;
+  traceSink?: (trace: ProductExtractionAiTrace) => void | Promise<void>;
   costLedger?: ProductExtractionCostLedger;
   requestTimeoutMs?: number;
 };
@@ -48,62 +62,124 @@ export function createOpenRouterProductFeatureExtractor(
   return async (
     input: AiProductFeatureExtractionInput,
   ): Promise<AiProductFeatureExtractionOutput> => {
-    const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: AbortSignal.timeout(requestTimeoutMs),
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: productExtractionSystemPrompt(),
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              url: input.url,
-              locale: input.locale,
-              fetchedAt: input.fetchedAt,
-              intendedUseSummary: input.intendedUseSummary,
-              pageText: input.htmlText,
-            }),
-          },
-        ],
-      }),
-    });
+    const startedAt = performance.now();
+    let usage: OpenRouterUsage = {};
+    let estimatedCostUsd = 0;
 
-    if (!response.ok) {
-      throw new Error(`OpenRouter request failed with status ${response.status}.`);
-    }
+    try {
+      const response = await fetchImpl("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(requestTimeoutMs),
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: productExtractionSystemPrompt(),
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                url: input.url,
+                locale: input.locale,
+                fetchedAt: input.fetchedAt,
+                intendedUseSummary: input.intendedUseSummary,
+                pageText: input.htmlText,
+              }),
+            },
+          ],
+        }),
+      });
 
-    const payload = (await response.json()) as OpenRouterChatResponse;
-    const usage: OpenRouterUsage = {
-      promptTokens: payload.usage?.prompt_tokens,
-      completionTokens: payload.usage?.completion_tokens,
-      totalTokens: payload.usage?.total_tokens,
-    };
-    options.usageSink?.(usage);
-    await options.costLedger?.record(
-      createProductExtractionCostRecord({
+      if (!response.ok) {
+        await emitTrace(options.traceSink, {
+          capability: "productExtraction",
+          provider: "openrouter",
+          model,
+          sourceUrl: input.url,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          estimatedCostUsd: 0,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "providerFailed",
+        });
+        throw new Error(`OpenRouter request failed with status ${response.status}.`);
+      }
+
+      const payload = (await response.json()) as OpenRouterChatResponse;
+      usage = {
+        promptTokens: payload.usage?.prompt_tokens,
+        completionTokens: payload.usage?.completion_tokens,
+        totalTokens: payload.usage?.total_tokens,
+      };
+      options.usageSink?.(usage);
+
+      const costRecord = createProductExtractionCostRecord({
         model,
         sourceUrl: input.url,
         usage,
         pricing: pricingForProductExtractorModel(model),
-      }),
-    );
+      });
+      estimatedCostUsd = costRecord.estimatedCostUsd;
+      await options.costLedger?.record(costRecord);
 
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("OpenRouter response did not include message content.");
+      const content = payload.choices?.[0]?.message?.content;
+      if (!content) {
+        await emitTrace(options.traceSink, traceFromUsage({
+          model,
+          sourceUrl: input.url,
+          usage,
+          estimatedCostUsd,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "validationFailed",
+        }));
+        throw new Error("OpenRouter response did not include message content.");
+      }
+
+      let parsed: AiProductFeatureExtractionOutput;
+      try {
+        parsed = parseAiExtractionOutput(content);
+      } catch (error) {
+        await emitTrace(options.traceSink, traceFromUsage({
+          model,
+          sourceUrl: input.url,
+          usage,
+          estimatedCostUsd,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "validationFailed",
+        }));
+        throw error;
+      }
+
+      await emitTrace(options.traceSink, traceFromUsage({
+        model,
+        sourceUrl: input.url,
+        usage,
+        estimatedCostUsd,
+        latencyMs: elapsedMs(startedAt),
+        outcome: "success",
+      }));
+      return parsed;
+    } catch (error) {
+      if (isProviderTransportError(error)) {
+        await emitTrace(options.traceSink, traceFromUsage({
+          model,
+          sourceUrl: input.url,
+          usage,
+          estimatedCostUsd,
+          latencyMs: elapsedMs(startedAt),
+          outcome: "providerFailed",
+        }));
+      }
+      throw error;
     }
-
-    return parseAiExtractionOutput(content);
   };
 }
 
@@ -117,8 +193,11 @@ export function productExtractionSystemPrompt(): string {
     "Return only valid JSON. Do not include markdown, comments, prose outside JSON, or trailing commas.",
     "Do not invent missing values. Do not infer a value from general product knowledge.",
     "Use the supplied product title only for identity and broad category hints. Do not extract technical feature values from the title alone.",
-    "Extract technical feature values only from product information sections, feature tables, bullet specifications, description/specification text, or other explicit page content.",
-    "If a value appears only in the title and not in a product information/specification area, add a gap or review item instead of an include feature.",
+    "Extract technical feature values only from Structured specs or Visible product-information snippets in pageText.",
+    "Do not use Product name, Brand, SKU, Barcode, Category evidence, or Visible page summary as the sole technical feature evidence.",
+    "For every returned feature include sourceText copied from the technical evidence in pageText. sourceText must contain the observed feature label and value where the value is textual/numeric.",
+    "Do not paraphrase sourceText. Keep it short and copy the evidence span as observed.",
+    "If a value appears only in the title/identity/summary areas, add a gap or review item instead of returning it as a feature.",
     "Preserve raw observable page values, but classify every feature before it can become a clause.",
     "",
     "FEATURE CLASSIFICATION",
@@ -148,8 +227,8 @@ export function productExtractionSystemPrompt(): string {
     "If copying the product's exact value would point to one product, use review instead of include.",
     "",
     "EXPECTED BEHAVIOR EXAMPLES",
-    "RAM 16 GB from a specification table -> include, low risk, suggested clause: 'Bilgisayar en az 16 GB sistem bellegine sahip olmalidir.'",
-    "SSD 512 GB from a specification table -> include, low risk.",
+    "RAM 16 GB from a specification table -> include, low risk, sourceText copied from the RAM specification row.",
+    "SSD 512 GB from a specification table -> include, low risk, sourceText copied from the SSD specification row.",
     "Intel Core Ultra 5 226V -> review, high risk, because exact processor model/vendor wording should be generalized.",
     "Lenovo, Samsung, Apple, model code, SKU -> exclude, high risk.",
     "Renk: Gri -> review, medium risk.",
@@ -164,6 +243,7 @@ export function productExtractionSystemPrompt(): string {
     '    "label": "string",',
     '    "value": "string|number|boolean",',
     '    "unit": "string",',
+    '    "sourceText": "short verbatim evidence copied only from Structured specs or Visible product-information snippets",',
     '    "specSuitability": {',
     '      "featureClass": "technicalRequired|technicalPreferred|identity|commercial|cosmetic|marketing|standardOrCompliance|unknown",',
     '      "decision": "include|review|exclude",',
@@ -176,6 +256,50 @@ export function productExtractionSystemPrompt(): string {
     '  "gaps": [{"code": "string", "message": "string", "severity": "info|warning|error", "featureKey": "string"}]',
     "}",
   ].join("\n");
+}
+
+function traceFromUsage(args: {
+  model: string;
+  sourceUrl: string;
+  usage: OpenRouterUsage;
+  estimatedCostUsd: number;
+  latencyMs: number;
+  outcome: ProductExtractionAiTrace["outcome"];
+}): ProductExtractionAiTrace {
+  const inputTokens = args.usage.promptTokens ?? 0;
+  const outputTokens = args.usage.completionTokens ?? 0;
+  return {
+    capability: "productExtraction",
+    provider: "openrouter",
+    model: args.model,
+    sourceUrl: args.sourceUrl,
+    inputTokens,
+    outputTokens,
+    totalTokens: args.usage.totalTokens ?? inputTokens + outputTokens,
+    estimatedCostUsd: args.estimatedCostUsd,
+    latencyMs: args.latencyMs,
+    outcome: args.outcome,
+  };
+}
+
+async function emitTrace(
+  sink: OpenRouterExtractorAdapterOptions["traceSink"],
+  trace: ProductExtractionAiTrace,
+): Promise<void> {
+  await sink?.(trace);
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, performance.now() - startedAt);
+}
+
+function isProviderTransportError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return true;
+  }
+  return !/OpenRouter request failed|message content|JSON|features array/i.test(
+    error.message,
+  );
 }
 
 function parseAiExtractionOutput(content: string): AiProductFeatureExtractionOutput {
